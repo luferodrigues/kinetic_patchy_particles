@@ -1,0 +1,7 @@
+{
+  "box_limits": 500.0,
+  "time_step": 1,
+  "n_steps": 10,
+  "n_interval": 2,
+  "n_dimensions": 3
+}

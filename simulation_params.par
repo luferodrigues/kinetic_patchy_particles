@@ -1,0 +1,14 @@
+box_limits
+15.0,
+temperature
+300.0,
+viscosity
+0.0008539,
+time_step
+1,
+n_steps
+20000,
+n_interval
+10,
+n_dimensions
+3,

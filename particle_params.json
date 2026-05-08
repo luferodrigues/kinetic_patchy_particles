@@ -1,0 +1,43 @@
+{
+  "particles": [
+    {
+      "type": 0,
+      "name": "Crowder",
+      "number": 5,
+      "radius": 1.0,
+      "diff_trans": 1.0,
+      "interacting": false
+    },
+    {
+      "type": 1,
+      "name": "Protein1",
+      "number": 10,
+      "radius": 2.0,
+      "diff_trans": 1.5,
+      "diff_rot": 1.0,
+      "interacting": true,
+      "patches_radius": [1.0, 1.0, 1.5],
+      "patches_positions": [
+        [0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0]
+      ],
+      "patches_alphas": [10.0, 20.0, 15.0]
+    },
+    {
+      "type": 2,
+      "name": "Protein2",
+      "number": 10,
+      "radius": 2.0,
+      "diff_trans": 2.0,
+      "diff_rot": 1.0,
+      "interacting": true,
+      "patches_radius": [1.2, 1.2],
+      "patches_positions": [
+        [0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0]
+      ],
+      "patches_alphas": [10.0, 20.0]
+    }
+  ]
+}
