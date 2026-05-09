@@ -596,5 +596,7 @@ def write_clusters_int(path, cluster_int, frame_number = 0, new_file = False):
         fp.write(f'{cluster_int}')
         fp.write('\n')
             
-def export_all(path, simulation):
-    return 0
+def write_particle_types(path, simulation):
+    with open(path, 'w') as fp:
+        for i in range(len(simulation['particles'])):
+            fp.write(f"{simulation['particles'][i]}\n")

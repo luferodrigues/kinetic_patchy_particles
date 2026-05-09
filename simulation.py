@@ -30,6 +30,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     path_cluster_max = os.path.join(folder, prefix, 'cluster_max.csv')
     path_cluster_n = os.path.join(folder, prefix, 'cluster_n.csv')
     path_cluster_agg = os.path.join(folder, prefix, 'cluster_agg.csv')
+    path_particles = os.path.join(folder, prefix, 'particles.csv')
     # Initializing elements
     coordinates = init.initialize_coordinates(sim_params, part_params)
     distances = init.initialize_distances(sim_params)
@@ -44,6 +45,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
         'clusters': clusters,
         'particles': particles,
         }
+    utils.write_particle_types(path_particles, simulation)
     for key in part_params.keys():
         dt = sim_params['time_step']
         try:

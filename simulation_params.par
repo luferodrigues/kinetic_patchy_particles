@@ -7,8 +7,8 @@ viscosity
 time_step
 1,
 n_steps
-20000,
+10000,
 n_interval
-10,
+1,
 n_dimensions
 3,
