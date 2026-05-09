@@ -143,7 +143,7 @@ def calculate_gr(parameters, dist_matrix, n_bins = 200):
     return [r, v / n * gr]
 
 # Calculate S(q) from g(r) (REF: Cristiano thesis, p. 213)
-def calculate_sq(parameters, q, r, gr):
+def sq_from_gr(parameters, q, r, gr):
     v = parameters['box_limits']**3
     n = parameters['n_particles'] * parameters['fraction_interacting' * 4]
     integral = np.zeros(len(q))
@@ -151,3 +151,86 @@ def calculate_sq(parameters, q, r, gr):
         integrand = r * np.sin(q*r) / q * (gr - 1)
         integral[i] = np.trapezoid(integrand, x = r)
     return 1 + n/v * 4*np.pi * integral
+
+def sq_from_frame(sim_params, simulation, qmax=None, nq=100):
+    """
+    Compute the isotropically averaged static structure factor S(q)
+    directly from particle positions.
+
+    Parameters
+    ----------
+    positions : (N, d) ndarray
+        Particle coordinates.
+    box_length : float
+        Simulation box length (assumes cubic box).
+    qmax : float, optional
+        Maximum q magnitude. Default = Nyquist-like limit.
+    nq : int
+        Number of q bins.
+
+    Returns
+    -------
+    qvals : ndarray
+        q-bin centers.
+    sq : ndarray
+        Averaged structure factor.
+    """
+
+    box_length = 2*sim_params['box_limits']
+    positions = simulation
+    positions = np.asarray(positions)
+    n, dim = positions.shape
+
+    # Fundamental reciprocal spacing
+    dq = 2 * np.pi / box_length
+
+    # Choose qmax
+    if qmax is None:
+        qmax = 10 * dq
+
+    # Integer reciprocal lattice vectors
+    nmax = int(np.ceil(qmax / dq))
+
+    q_vectors = []
+    q_magnitudes = []
+
+    # Generate reciprocal vectors
+    ranges = [range(-nmax, nmax + 1)] * dim
+
+    for nvec in np.array(np.meshgrid(*ranges)).T.reshape(-1, dim):
+        if np.all(nvec == 0):
+            continue
+
+        qvec = dq * nvec
+        qmag = np.linalg.norm(qvec)
+
+        if qmag <= qmax:
+            q_vectors.append(qvec)
+            q_magnitudes.append(qmag)
+
+    q_vectors = np.array(q_vectors)
+    q_magnitudes = np.array(q_magnitudes)
+
+    # Compute density modes rho(q)
+    rho_q = np.exp(-1j * positions @ q_vectors.T).sum(axis=0)
+
+    # Structure factor
+    s_q = (np.abs(rho_q) ** 2) / n
+
+    # Bin by |q|
+    bins = np.linspace(0, qmax, nq + 1)
+    qvals = 0.5 * (bins[:-1] + bins[1:])
+    sq = np.zeros(nq)
+    counts = np.zeros(nq)
+
+    inds = np.digitize(q_magnitudes, bins) - 1
+
+    for i, s in zip(inds, s_q):
+        if 0 <= i < nq:
+            sq[i] += s
+            counts[i] += 1
+
+    mask = counts > 0
+    sq[mask] /= counts[mask]
+
+    return qvals[mask], sq[mask]
