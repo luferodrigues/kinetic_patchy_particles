@@ -7,16 +7,11 @@ import calculate as calc
 
 # Run one simulation step
 def simulation_step(sim_params, part_params, inter_params, simulation, threshold):
-    simulation_next = {}
     simulation_next = step.generate_next_step(sim_params, part_params, simulation)
-    step.apply_periodic_boundaries(sim_params, simulation_next)
+    simulation_next['distances'] = step.calculate_distance_matrix(simulation_next['coordinates'], sim_params['box_limits'])
+    step.apply_periodic_boundaries(simulation_next['coordinates'], sim_params['box_limits'], sim_params['n_dimensions'])
     simulation_next['particles'] = simulation['particles']
-    # Until here we have updated only the coordinates of CoM coords, patch orientations and distance. 
     # We need to update the interactions and clusters now
-    for i in range(sim_params['n_particles']):
-        process = [i]
-        distances, proceed = step.update_distances(sim_params, part_params, simulation_next, process)
-        simulation_next['distances'] = distances
     simulation_next['interactions'] = step.update_interactions(part_params, inter_params, simulation_next, threshold)
     simulation_next['clusters'] = step.update_clusters(simulation_next['interactions'])
     return simulation_next
@@ -37,6 +32,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     interactions = init.initialize_interactions(sim_params, part_params)
     clusters = init.initialize_clusters()
     particles = init.initialize_particles(part_params)
+    particle_types = particles.astype(np.int64)
     # Group everything in a single dictionary
     simulation = {
         'coordinates': coordinates,
@@ -71,16 +67,25 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     threshold = utils.max_distance(part_params, manual_dist)
     patches = init.initialize_patches(sim_params, part_params, simulation)
     simulation['patches'] = patches
+    radii_types = np.array([part_params[str(t)]['radius'] for t in range(len(part_params))])
+    radii_all = radii_types[particle_types]
+    simulation['radii'] = radii_all
+    
+    cell_size = threshold # Setting length for neighbor cells (could be a multiplication of threshold, for example)
+    n_cells_1d = int(np.floor((2 * sim_params['box_limits']) / cell_size)) # Finding the number of cells
+    sim_params['n_cells_1d'] = n_cells_1d
+    sim_params['cell_size'] = (2 * sim_params['box_limits']) / n_cells_1d
+    
     for i in range(sim_params['n_particles']):
         process = [i]
-        distances, proceed = step.update_distances(sim_params, part_params, simulation, process)
+        distances, proceed = step.update_distances(sim_params, part_params, simulation, radii_all, process)
         # Check to avoid steric clashes when initializing system
         try:
             if proceed == False:
                 while proceed == False:
                     simulation['coordinates'][i] = np.random.uniform(low = -sim_params['box_limits'], high = sim_params['box_limits'], \
                                                           size = sim_params['n_dimensions'])
-                    distances, proceed = step.update_distances(sim_params, part_params, simulation, process)
+                    distances, proceed = step.update_distances(sim_params, part_params, simulation, radii_all, process)
                 simulation['distances'] = distances
         except:        
             simulation['distances'] = distances

@@ -1,25 +1,40 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from numba import njit
 import utils
 
 # Simple distance calculation
+@njit
 def calculate_distance_simple(vec1, vec2):
     vector = vec2 - vec1
     dist = np.linalg.norm(vector)
     return dist
 
 # Cartesian distance definition considering periodic boundary conditions from -box_limits to +box_limits
-def calculate_distance(sim_params, vec1, vec2):
+@njit
+def calculate_distance(box_limits, vec1, vec2):
     dist_squared = 0
     for i in range(len(vec1)):
         diff1 = (vec2[i] - vec1[i])**2
-        diff2 = (vec2[i] - (vec1[i] + 2*sim_params['box_limits']))**2
-        diff3 = (vec2[i] - (vec1[i] - 2*sim_params['box_limits']))**2
+        diff2 = (vec2[i] - (vec1[i] + 2*box_limits))**2
+        diff3 = (vec2[i] - (vec1[i] - 2*box_limits))**2
         dist_squared += min([diff1, diff2, diff3])
     dist = np.sqrt(dist_squared)
     return dist
 
+# Cartesian distance definition considering periodic boundary conditions from -box_limits to +box_limits
+@njit
+def calculate_distance_sq(box_limits, vec1, vec2):
+    dist_squared = 0.0
+    for i in range(len(vec1)):
+        diff1 = (vec2[i] - vec1[i])**2
+        diff2 = (vec2[i] - (vec1[i] + 2*box_limits))**2
+        diff3 = (vec2[i] - (vec1[i] - 2*box_limits))**2
+        dist_squared += min([diff1, diff2, diff3])
+    return dist_squared
+
 # Calculates center of mass of list of coordinates
+@njit
 def center_of_mass(coordinates_list):
     com = np.array([np.sum(coordinates_list[:,0]), np.sum(coordinates_list[:,1]), \
                                np.sum(coordinates_list[:,2])]) / len(coordinates_list)
@@ -34,10 +49,12 @@ def sign(x):
     else:
         return 1 # Might also return 0
     
+@njit
 def normalize_vector(vector):
     return vector / np.linalg.norm(vector)
 
 # Convert from spherical to cartesian coordinate system (r, theta E [0,pi], phi E [0,2pi))
+@njit
 def spherical_to_cartesian(r, theta, phi, degrees = False):
     if degrees == True:
         theta_val = theta * (np.pi / 180)
@@ -51,6 +68,7 @@ def spherical_to_cartesian(r, theta, phi, degrees = False):
     return [x, y, z]
 
 # Convert from cartesian to spherical coordinate system (r, theta E [0,pi], phi E [0,2pi))
+@njit
 def cartesian_to_spherical(x, y, z, degrees = False):
     r = np.sqrt(x**2 + y**2 + z**2)
     theta = np.arccos(z / r)
@@ -99,6 +117,7 @@ def calculate_diff_rotation(radius, viscosity = 0.8539e-3, temperature = 300):
     return diff_rot * 1e9 # # Converting from rad^2/s to to rad^2/ns
 
 # Converts rotational/rotational diffusion into angle per unit time
+@njit
 def diff_to_sigma(diff, time_step):
     sigma = np.sqrt(2*diff*time_step)
     return sigma
@@ -153,29 +172,6 @@ def sq_from_gr(parameters, q, r, gr):
     return 1 + n/v * 4*np.pi * integral
 
 def sq_from_frame(sim_params, simulation, qmax=None, nq=100):
-    """
-    Compute the isotropically averaged static structure factor S(q)
-    directly from particle positions.
-
-    Parameters
-    ----------
-    positions : (N, d) ndarray
-        Particle coordinates.
-    box_length : float
-        Simulation box length (assumes cubic box).
-    qmax : float, optional
-        Maximum q magnitude. Default = Nyquist-like limit.
-    nq : int
-        Number of q bins.
-
-    Returns
-    -------
-    qvals : ndarray
-        q-bin centers.
-    sq : ndarray
-        Averaged structure factor.
-    """
-
     box_length = 2*sim_params['box_limits']
     positions = simulation
     positions = np.asarray(positions)

@@ -1,8 +1,10 @@
 import numpy as np
+from numba import njit
 import utils
 import calculate as calc
 
 # Generate (x,y,z) coordinates from randomly generated vector in spherical coordinates
+@njit
 def generate_step_coords(diff, dt = 1):
     sigma = np.sqrt(2*diff*dt)
     r = np.abs(np.random.normal(loc = 0, scale = sigma))
@@ -17,17 +19,33 @@ def generate_next_step(sim_params, part_params, simulation, verbose = False):
     # Randomizing list of indices for every step so no particle has "priority" throughout the simulation
     np.random.shuffle(indexes)
     simulation_next = simulation.copy()
-    simulation_next['coordinates'] = simulation['coordinates'].copy()
-    simulation_next['distances'] = simulation['distances'].copy()
+    simulation_next = {
+        'coordinates': simulation['coordinates'].copy(),
+        'patches': [p.copy() for p in simulation['patches']],
+        'particles': simulation['particles'], # This usually doesn't change, so reference is okay
+        'radii': simulation['radii'],
+        'interactions': simulation['interactions']
+    }
     simulation_next['patches'] = [p.copy() for p in simulation['patches']]
     simulation_aux = simulation.copy()
     simulation_aux['coordinates'] = simulation['coordinates'].copy()
     simulation_aux['distances'] = simulation['distances'].copy()
     simulation_aux['patches'] = [p.copy() for p in simulation['patches']]
-    processed = []
+    radii = simulation['radii']
+    coords = simulation_next['coordinates']
+    n_dims = sim_params['n_dimensions']
+    box_limits = sim_params['box_limits']
+    n_particles = len(coords)
+    cell_size = sim_params['cell_size']
+    
+    # Building neighbors cell list
+    n_cells_xyz = np.array([sim_params['n_cells_1d']]*3, dtype=np.int32)
+    head, linked_list = utils.update_cell_list(coords, box_limits, \
+                                               cell_size, n_cells_xyz)
+    processed = set()
     for i in indexes:
         if i in processed: # If the particle, through clustering, has already been accounted for
-            pass
+            continue
         else:
             to_process = [i]
             part_type = int(simulation['particles'][i])
@@ -44,6 +62,7 @@ def generate_next_step(sim_params, part_params, simulation, verbose = False):
                     del to_process[0]
                 else: 
                     pass
+                to_process = np.array(to_process, dtype = np.int64)
             # If cluster, calculate diffusion coefficient
             if ( len(to_process) > 1 ):
                 diff = calc.diffusion_cluster(part_params, simulation, to_process, which = 'trans')
@@ -57,84 +76,141 @@ def generate_next_step(sim_params, part_params, simulation, verbose = False):
                     sigma_rot = calc.diff_to_sigma(diff_rot, sim_params['time_step'])
                     rot_vec = np.random.normal(0, sigma_rot, size=3)
                     rotation = calc.generate_rotation(rot_vec)
-                    rotated_coords, rot_order = rotate_cluster(sim_params, simulation, to_process, rotation)
+                    rot_matrix = rotation.as_matrix()
+                    rotated_coords = rotate_cluster(coords, n_particles, box_limits, n_dims, to_process, rot_matrix)
                     rotated_coords += step
-                    # JUNTAR ROTATED COORDS A UM COORDS EXTERNO PRA ATUALIZAR DISTÂNCIAS
-                    counter = 0
-                    for ro in rot_order:
-                        simulation_aux['coordinates'][ro] = rotated_coords[counter]
-                        counter += 1
-                    new_distances, proceed = update_distances(sim_params, part_params, simulation_aux, to_process = to_process)
-                    if proceed == False:
-                        pass
-                    else:
+                    clash = False
+                    for idx, g_idx in enumerate(to_process):
+                        new_pos = rotated_coords[idx]
+                        #global_idx = to_process[p_idx_in_cluster]
+                        #new_pos = rotated_coords[p_idx_in_cluster]
+                        if utils.check_steric_clash_cell(g_idx, new_pos, coords, head, linked_list, radii, box_limits, \
+                                                         cell_size, n_cells_xyz) == True:
+                            clash = True
+                            break
+                    # To define if we accept or reject the step:
+                    if clash == False:
+                        # Update the current coords array and the linked cell list
                         rotated_patches = rotate_patches(simulation, to_process, rotation)
-                        counter = 0
-                        for ro in rot_order:
-                            simulation_next['coordinates'][ro] = rotated_coords[counter]
-                            counter += 1
-                        simulation_next['distances'] = new_distances
-                        counter = 0
-                        for tp in to_process:
-                            simulation_next['patches'][tp] = rotated_patches[counter]
-                            counter += 1
+                        for idx, g_idx in enumerate(to_process):
+                            # Update Master local array (for the next cluster in this step to see)
+                            coords[g_idx] = rotated_coords[idx]
+                            simulation_next['coordinates'][g_idx] = rotated_coords[idx]
+                            simulation_next['patches'][g_idx] = rotated_patches[idx]
+                            
+                        # Rebuild the cell list
+                        head, linked_list = utils.update_cell_list(coords, box_limits, cell_size, n_cells_xyz)
                 else:
                     sigma = part_params[str(part_type)]['diff_rot']
                     rot_vec = np.random.normal(0, sigma, size=3)
                     rotation = calc.generate_rotation(rot_vec)
-                    simulation_aux['coordinates'][i] = simulation['coordinates'][i] + step
-                    new_distances, proceed = update_distances(sim_params, part_params, simulation_aux, to_process = to_process)
-                    if proceed == False:
-                        simulation_next['coordinates'][i] = simulation['coordinates'][i]
+                    new_position = coords[i] + step
+                    clash = utils.check_steric_clash_cell(i, new_position, coords, head, linked_list, radii, box_limits, \
+                                                          cell_size, n_cells_xyz)
+                        
+                    if clash == True:
+                        simulation_next['coordinates'][i] = coords[i]
                     else:
-                        simulation_next['coordinates'][i] = simulation_aux['coordinates'][i]
-                        simulation_next['distances'] = new_distances
+                        coords[i] = new_position
+                        simulation_next['coordinates'][i] = new_position
                         rotated_patches = rotate_patches(simulation, to_process, rotation)
                         simulation_next['patches'][i] = rotated_patches[0]
+                        head, linked_list = utils.update_cell_list(coords, box_limits, cell_size, n_cells_xyz)
             else:
-                simulation_aux['coordinates'][i] = simulation['coordinates'][i] + step
-                new_distances, proceed = update_distances(sim_params, part_params, simulation_aux, to_process = to_process)
-                if proceed == False:
-                    simulation_next['coordinates'][i] = simulation['coordinates'][i]
+                new_position = coords[i] + step
+                clash = utils.check_steric_clash_cell(i, new_position, coords, head, linked_list, radii, box_limits, \
+                                                      cell_size, n_cells_xyz)
+                if clash == True:
+                    simulation_next['coordinates'][i] = coords[i]
                 else:
-                    simulation_next['coordinates'][i] = simulation_aux['coordinates'][i]
-                    simulation_next['distances'] = new_distances
+                    coords[i] = new_position
+                    simulation_next['coordinates'][i] = new_position
+                    head, linked_list = utils.update_cell_list(coords, box_limits, cell_size, n_cells_xyz)
             for item in to_process:
-                processed.append(item)
+                processed.add(item)
     return simulation_next
             
-# Updates distances matrix. Returns updated matrix if no clash exists; returns 0 if there are any clashes
-def update_distances(sim_params, part_params, simulation, to_process = []):
-    new_dists = 1*simulation['distances']
-    check = True
-    for i in to_process:
-        for j in range(len(simulation['particles'])):
-            if i == j:
-                pass
-            else:
-                coords_i = simulation['coordinates'][i]
-                coords_j = simulation['coordinates'][j]
-                type_i = str(simulation['particles'][i])
-                type_j = str(simulation['particles'][j])
-                r_hs_i = part_params[type_i]['radius']
-                r_hs_j = part_params[type_j]['radius']
-                r = r_hs_i + r_hs_j
-                dist = calc.calculate_distance(sim_params, coords_i, coords_j)
-                new_dists[i,j] = dist
-                new_dists[j,i] = dist
-                if new_dists[i,j] <= r:
-                    check = False
-    return new_dists, check
+# =============================================================================
+# # Updates distances matrix. Returns updated matrix if no clash exists; returns 0 if there are any clashes
+# def update_distances(sim_params, part_params, simulation, to_process = []):
+#     new_dists = 1*simulation['distances']
+#     check = True
+#     for i in to_process:
+#         coords_i = simulation['coordinates'][i]
+#         type_i = str(simulation['particles'][i])
+#         r_hs_i = part_params[type_i]['radius']
+#         for j in range(len(simulation['particles'])):
+#             if i == j:
+#                 pass
+#             else:
+#                 coords_j = simulation['coordinates'][j]
+#                 type_j = str(simulation['particles'][j])
+#                 r_hs_j = part_params[type_j]['radius']
+#                 r = r_hs_i + r_hs_j
+#                 dist = calc.calculate_distance_sq(sim_params['box_limits'], coords_i, coords_j)
+#                 new_dists[i,j] = dist
+#                 new_dists[j,i] = dist
+#                 if new_dists[i,j] <= r**2:
+#                     check = False
+#                 new_dists[i,j] = np.sqrt(dist)
+#                 new_dists[j,i] = new_dists[i,j]
+#     return new_dists, check
+# =============================================================================
 
+def update_distances(sim_params, part_params, simulation, radii_all, to_process):
+    indices = np.array(to_process, dtype = np.int64)
+    coords = simulation['coordinates']
+    distances = simulation['distances']
+    box_limits = sim_params['box_limits']
+    n_particles = sim_params['n_particles']
+    proceed = update_distances_numba(indices, coords, distances, radii_all, box_limits, n_particles)
+    return distances, proceed
+
+# Updates distances matrix. Returns updated matrix if no clash exists; returns 0 if there are any clashes
+def update_distances_numba(indices, coords, distances, radii, box_limits, n_particles):
+    for i in indices:
+        for j in range(n_particles):
+            if i == j:
+                continue
+            dist_sq = calc.calculate_distance_sq(box_limits, coords[i], coords[j])
+            j_in_cluster = False
+            for p in indices:
+                if j == p:
+                    j_in_cluster = True
+                    break
+            if j_in_cluster == False:
+                limit = radii[i] + radii[j]
+                if dist_sq < limit**2:
+                    return False
+            dist = np.sqrt(dist_sq)
+            distances[i,j] = dist
+            distances[j,i] = dist
+    return True
+    
+@njit
+def calculate_distance_matrix(coords, box_limits):
+    n = len(coords)
+    distances = np.zeros((n,n), dtype = np.float64)
+    for i in range(n):
+        for j in range(i,n):
+            if i == j:
+                distances[i,j] = 0
+            else:
+                dist = calc.calculate_distance(box_limits, coords[i], coords[j])
+                distances[i,j] = dist
+                distances[j,i] = dist
+    return distances
+    
 # Apply periodic boundary conditions where applicable
-def apply_periodic_boundaries(sim_params, simulation):
-    for i in range(len(simulation['coordinates'])):
-        for d in range(sim_params['n_dimensions']):
-            if (np.abs(simulation['coordinates'][i][d]) > sim_params['box_limits']):
-                if simulation['coordinates'][i][d] > 0:
-                    simulation['coordinates'][i][d] = simulation['coordinates'][i][d] - 2*sim_params['box_limits']
+@njit
+def apply_periodic_boundaries(coordinates, box_limits, n_dimensions):
+    for i in range(len(coordinates)):
+        for d in range(n_dimensions):
+            if (np.abs(coordinates[i][d]) > box_limits):
+                if coordinates[i][d] > 0:
+                    coordinates[i][d] = coordinates[i][d] - 2*box_limits
                 else:
-                    simulation['coordinates'][i][d] = simulation['coordinates'][i][d] + 2*sim_params['box_limits']
+                    coordinates[i][d] = coordinates[i][d] + 2*box_limits
             else: 
                 pass
     #return simulation['coordinates']
@@ -250,30 +326,36 @@ def update_clusters(interactions):
 # =============================================================================
 
 # Find coordinate from potentially neighboring (periodic) boxes with minimum distance to reference vector (vec2)
-def get_pbc_neighbor(sim_params, vec1, vec2):
-    new_coords = np.zeros(sim_params['n_dimensions'])
+@njit
+def get_pbc_neighbor(vec1, vec2, box_limits, n_dimensions):
+    new_coords = np.zeros(n_dimensions)
     for i in range(len(vec1)):
-        vec1_cands = np.array([vec1[i], vec1[i] + 2*sim_params['box_limits'], vec1[i] - 2*sim_params['box_limits']])
+        vec1_cands = np.array([vec1[i], vec1[i] + 2*box_limits, vec1[i] - 2*box_limits])
         diff = (vec2[i] - vec1_cands)**2
         min_index = np.argmin(diff)
         new_coords[i] = vec1_cands[min_index]
     return new_coords
 
 # Rotate cluster around center of mass considering periodic boundary conditions
-def rotate_cluster(sim_params, simulation, processing_list, rotation):
+@njit
+def rotate_cluster(coordinates, n_particles, box_limits, n_dimensions, processing_list, rotation_matrix):
     ref_index = processing_list[0]
-    ref_coords = simulation['coordinates'][ref_index]
-    neighbors = [ref_coords]
-    for p in range(1, len(processing_list)):
+    ref_coords = coordinates[ref_index]
+    n_cluster = len(processing_list)
+    neighbors = np.zeros((n_cluster, 3))
+    neighbors[0] = ref_coords
+    for p in range(1, n_cluster):
         neigh_index = processing_list[p]
-        point = simulation['coordinates'][neigh_index]
-        neigh = get_pbc_neighbor(sim_params, point, ref_coords)
-        neighbors.append(neigh)
-    neighbors = np.array(neighbors)
-    com = calc.center_of_mass(neighbors)
-    rotated_coords = rotation.apply(neighbors - com)
+        point = coordinates[neigh_index]
+        neighbors[p] = get_pbc_neighbor(point, ref_coords, box_limits, n_dimensions)
+    com = np.zeros(n_dimensions)
+    for i in range(n_cluster):
+        com += neighbors[i]
+    com = com / n_cluster
+    shifted_to_origin = neighbors - com
+    rotated_coords = np.dot(shifted_to_origin, rotation_matrix.T)
     rotated_coords += com
-    return rotated_coords, processing_list
+    return rotated_coords
 
 # Rotate list of patches
 def rotate_patches(simulation, processing_list, rotation):

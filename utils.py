@@ -1,5 +1,7 @@
 import os
 import numpy as np
+from numba import njit
+import calculate as calc
 
 # Find target in sublists within a list
 def search_sublists(list_of_lists, target):
@@ -371,6 +373,49 @@ def copy_dict(entry_dict):
     for key, val in entry_dict.items():
         new_dict[key] = val
     return new_dict
+
+@njit
+def update_cell_list(coords, box_limits, cell_size, n_cells_xyz):
+    total_cells = n_cells_xyz[0] * n_cells_xyz[1] * n_cells_xyz[2]
+    head = np.full(total_cells, -1, dtype=np.int32)
+    linked_list = np.full(len(coords), -1, dtype=np.int32)
+    for i in range(len(coords)):
+        # Find cell indices (0 to n_cells-1)
+        ix = int((coords[i, 0] + box_limits) / cell_size)
+        iy = int((coords[i, 1] + box_limits) / cell_size)
+        iz = int((coords[i, 2] + box_limits) / cell_size)
+        # Clip to ensure floating point errors don't go out of bounds
+        ix = max(0, min(ix, n_cells_xyz[0]-1))
+        iy = max(0, min(iy, n_cells_xyz[1]-1))
+        iz = max(0, min(iz, n_cells_xyz[2]-1))
+        c_idx = ix + n_cells_xyz[0] * (iy + n_cells_xyz[1] * iz)
+        linked_list[i] = head[c_idx]
+        head[c_idx] = i
+    return head, linked_list
+
+@njit
+def check_steric_clash_cell(i_idx, i_new_pos, all_coords, head, linked_list, radii, box_limits, cell_size, n_cells_xyz):
+    # Cell where the new coordinate would be
+    ix = int((i_new_pos[0] + box_limits) / cell_size)
+    iy = int((i_new_pos[1] + box_limits) / cell_size)
+    iz = int((i_new_pos[2] + box_limits) / cell_size)
+    # Check neighboring cells
+    for dx in range(-1, 2):
+        for dy in range(-1, 2):
+            for dz in range(-1, 2):
+                nx = (ix + dx) % n_cells_xyz[0]
+                ny = (iy + dy) % n_cells_xyz[1]
+                nz = (iz + dz) % n_cells_xyz[2]
+                target_cell = nx + n_cells_xyz[0] * (ny + n_cells_xyz[1] * nz)
+                j = head[target_cell]
+                while j != -1:
+                    if j != i_idx:
+                        dist_sq = calc.calculate_distance_sq(box_limits, i_new_pos, all_coords[j])
+                        limit = radii[i_idx] + radii[j]
+                        if dist_sq < limit**2:
+                            return True # Steric clash
+                    j = linked_list[j]
+    return False # No clash
     
 def check_particle_interaction(inter_params, particle1, particle2):
     pair = (particle1, particle2)
@@ -426,17 +471,19 @@ def max_distance(part_params, manual_value = 0):
     return maximum_distance
 
 # Given two patches in n_norm and a d_norm as the distance vector between both particles, checks if they are aligned
+@njit
 def check_alignment(n_norms, d_norm, alphas, degrees = True):
-    alphas_radians = np.zeros_like(alphas, dtype = float)
+    alphas_radians = np.zeros(len(alphas), dtype=np.float64)
     if degrees == True:
         for i in range(len(alphas)):
-            alphas_radians[i] = alphas[i] * (np.pi / 180)
+            alphas_radians[i] = alphas[i] * (np.pi / 180.0)
     else:
-        alphas_radians = alphas
-    aligned = [False, False]
-    sign = -1
+        for i in range(len(alphas)):
+            alphas_radians[i] = alphas[i]
+    aligned = np.array([False, False])
+    sign = -1.0
     for i in range(len(alphas_radians)):
-        dot = np.dot(n_norms[i], sign*d_norm)
+        dot = np.dot(n_norms[i, :], sign*d_norm)
         if dot >= np.cos(alphas_radians[i]):
             aligned[i] = True
         else:
@@ -449,7 +496,7 @@ def check_alignment(n_norms, d_norm, alphas, degrees = True):
 
 # Given two lists of patches, checks which are aligned
 def check_alignment_all(patches1, patches2, alphas1, alphas2, d_vector):
-    d_norm = d_vector / np.linalg.norm(d_vector)
+    d_norm = np.ascontiguousarray(d_vector / np.linalg.norm(d_vector))
     aligned_pair = []
     check = False
     for i in range(len(patches1)):
@@ -458,8 +505,10 @@ def check_alignment_all(patches1, patches2, alphas1, alphas2, d_vector):
         for j in range(len(patches2)):
             patch2 = patches2[j]
             a2 = alphas2[j]
-            n_norms = [patch1, patch2]
-            alphas = [a1, a2]
+            n_norms = np.zeros((2, 3), dtype=np.float64)
+            n_norms[0, :] = patch1
+            n_norms[1, :] = patch2
+            alphas = np.array([a1, a2], dtype=np.float64)
             check_alignment_patches = check_alignment(n_norms, d_norm, alphas)
             if check_alignment_patches == True:
                 check = True
@@ -599,4 +648,4 @@ def write_clusters_int(path, cluster_int, frame_number = 0, new_file = False):
 def write_particle_types(path, simulation):
     with open(path, 'w') as fp:
         for i in range(len(simulation['particles'])):
-            fp.write(f"{simulation['particles'][i]}\n")
+            fp.write(f"{simulation['particles'][i]}\n")     
