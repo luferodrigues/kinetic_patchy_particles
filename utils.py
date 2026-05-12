@@ -394,7 +394,7 @@ def update_cell_list(coords, box_limits, cell_size, n_cells_xyz):
     return head, linked_list
 
 @njit
-def check_steric_clash_cell(i_idx, i_new_pos, all_coords, head, linked_list, radii, box_limits, cell_size, n_cells_xyz):
+def check_steric_clash_cell(i_idx, i_new_pos, all_coords, head, linked_list, radii, box_limits, cell_size, n_cells_xyz, skip_indices = None):
     # Cell where the new coordinate would be
     ix = int((i_new_pos[0] + box_limits) / cell_size)
     iy = int((i_new_pos[1] + box_limits) / cell_size)
@@ -409,7 +409,13 @@ def check_steric_clash_cell(i_idx, i_new_pos, all_coords, head, linked_list, rad
                 target_cell = nx + n_cells_xyz[0] * (ny + n_cells_xyz[1] * nz)
                 j = head[target_cell]
                 while j != -1:
-                    if j != i_idx:
+                    in_cluster = False
+                    for ind in skip_indices:
+                        if j == ind:
+                            in_cluster = True
+                            break
+                    
+                    if in_cluster == False:
                         dist_sq = calc.calculate_distance_sq(box_limits, i_new_pos, all_coords[j])
                         limit = radii[i_idx] + radii[j]
                         if dist_sq < limit**2:

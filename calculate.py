@@ -22,6 +22,22 @@ def calculate_distance(box_limits, vec1, vec2):
     dist = np.sqrt(dist_squared)
     return dist
 
+# Distance vector considering PBC
+@njit
+def calculate_distance_vector_pbc(box_limits, vec1, vec2):
+    l = 2.0 * box_limits
+    dx = vec2[0] - vec1[0]
+    dy = vec2[1] - vec1[1]
+    dz = vec2[2] - vec1[2]
+    if dx > box_limits: dx -= l
+    elif dx < -box_limits: dx += l
+    if dy > box_limits: dy -= l
+    elif dy < -box_limits: dy += l
+    if dz > box_limits: dz -= l
+    elif dz < -box_limits: dz += l
+    return np.array([dx, dy, dz])
+
+
 # Cartesian distance definition considering periodic boundary conditions from -box_limits to +box_limits
 @njit
 def calculate_distance_sq(box_limits, vec1, vec2):

@@ -85,7 +85,7 @@ def generate_next_step(sim_params, part_params, simulation, verbose = False):
                         #global_idx = to_process[p_idx_in_cluster]
                         #new_pos = rotated_coords[p_idx_in_cluster]
                         if utils.check_steric_clash_cell(g_idx, new_pos, coords, head, linked_list, radii, box_limits, \
-                                                         cell_size, n_cells_xyz) == True:
+                                                         cell_size, n_cells_xyz, skip_indices = to_process) == True:
                             clash = True
                             break
                     # To define if we accept or reject the step:
@@ -105,8 +105,9 @@ def generate_next_step(sim_params, part_params, simulation, verbose = False):
                     rot_vec = np.random.normal(0, sigma, size=3)
                     rotation = calc.generate_rotation(rot_vec)
                     new_position = coords[i] + step
+                    skip_idx = np.array([i], dtype=np.int64)
                     clash = utils.check_steric_clash_cell(i, new_position, coords, head, linked_list, radii, box_limits, \
-                                                          cell_size, n_cells_xyz)
+                                                          cell_size, n_cells_xyz, skip_indices = skip_idx)
                         
                     if clash == True:
                         simulation_next['coordinates'][i] = coords[i]
@@ -118,8 +119,9 @@ def generate_next_step(sim_params, part_params, simulation, verbose = False):
                         head, linked_list = utils.update_cell_list(coords, box_limits, cell_size, n_cells_xyz)
             else:
                 new_position = coords[i] + step
+                skip_idx = np.array([i], dtype=np.int64)
                 clash = utils.check_steric_clash_cell(i, new_position, coords, head, linked_list, radii, box_limits, \
-                                                      cell_size, n_cells_xyz)
+                                                      cell_size, n_cells_xyz, skip_indices = skip_idx)
                 if clash == True:
                     simulation_next['coordinates'][i] = coords[i]
                 else:
@@ -216,8 +218,9 @@ def apply_periodic_boundaries(coordinates, box_limits, n_dimensions):
     #return simulation['coordinates']
        
 # Apply test_interaction for particles within specific distances and with aligned patches
-def update_interactions(part_params, inter_params, simulation, threshold):
+def update_interactions(sim_params, part_params, inter_params, simulation, threshold):
     particle_list = list(range(0,simulation['distances'].shape[0]))
+    box_limits = sim_params['box_limits']
     interactions_new = 1 * simulation['interactions']
     for i in range(0, len(particle_list)):
         if len(particle_list) == 1:
@@ -247,7 +250,7 @@ def update_interactions(part_params, inter_params, simulation, threshold):
                             # Compatible if some pair of patches are pointing at each other
                             alphas1 = params1['patches']['alphas']
                             alphas2 = params2['patches']['alphas']
-                            d_vector = simulation['coordinates'][i] - simulation['coordinates'][j]
+                            d_vector = calc.calculate_distance_vector_pbc(box_limits, simulation['coordinates'][j], simulation['coordinates'][i])
                             orient_check = utils.check_alignment_all(patches1, patches2, alphas1, alphas2, d_vector)
                             aligned = orient_check[0]
                             pair_patches = orient_check[1]

@@ -12,7 +12,7 @@ def simulation_step(sim_params, part_params, inter_params, simulation, threshold
     step.apply_periodic_boundaries(simulation_next['coordinates'], sim_params['box_limits'], sim_params['n_dimensions'])
     simulation_next['particles'] = simulation['particles']
     # We need to update the interactions and clusters now
-    simulation_next['interactions'] = step.update_interactions(part_params, inter_params, simulation_next, threshold)
+    simulation_next['interactions'] = step.update_interactions(sim_params, part_params, inter_params, simulation_next, threshold)
     simulation_next['clusters'] = step.update_clusters(simulation_next['interactions'])
     return simulation_next
 
@@ -89,7 +89,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
                 simulation['distances'] = distances
         except:        
             simulation['distances'] = distances
-    simulation['interactions'] = step.update_interactions(part_params, inter_params, simulation, threshold)
+    simulation['interactions'] = step.update_interactions(sim_params, part_params, inter_params, simulation, threshold)
     simulation['clusters'] = step.update_clusters(simulation['interactions'])
     
     # -------------------------------- #

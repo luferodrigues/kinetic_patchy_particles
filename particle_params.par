@@ -1,11 +1,11 @@
 type
-0,
+50,
 name
-Crowder,
+Crowder (PEG5K),
 number
 0,
 radius
-2.0,
+3.0,
 interacting
 no,
 
@@ -14,7 +14,7 @@ type
 name
 Protein1,
 number
-2,
+100,
 radius
 2.0,
 interacting
@@ -33,9 +33,9 @@ type
 name
 Protein2,
 number
-0,
+100,
 radius
-2.0,
+3.0,
 interacting
 yes,
 patches_radius
@@ -45,3 +45,14 @@ patches_positions
 0.0,1.0,0.0,
 patches_alphas
 20.0,20.0,
+
+type
+3,
+name
+Crowder (PEG5K),
+number
+0,
+radius
+3.0,
+interacting
+no,
