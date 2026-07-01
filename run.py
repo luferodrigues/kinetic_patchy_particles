@@ -3,6 +3,9 @@ import shutil
 import argparse
 import utils
 import simulation as sim
+import time
+
+start_time = time.perf_counter()
 
 parser = argparse.ArgumentParser(prog='Monte Carlo Simulation',
                     description='MC simulation of patchy particles',
@@ -33,3 +36,6 @@ inter_params = utils.import_interaction_params(file_inters)
 
 #paths = utils.create_files(prefix = prefix_out, folder = folder_out)
 sim.run_simulation(sim_params, part_params, inter_params, prefix = prefix_out, folder = folder_out)
+end_time = time.perf_counter()
+print(f"Finished in {(end_time - start_time)/60} minutes")
+

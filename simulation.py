@@ -14,6 +14,7 @@ def simulation_step(sim_params, part_params, inter_params, simulation, threshold
     # We need to update the interactions and clusters now
     simulation_next['interactions'] = step.update_interactions(sim_params, part_params, inter_params, simulation_next, threshold)
     simulation_next['clusters'] = step.update_clusters(simulation_next['interactions'])
+    simulation_next['n_bonds'] = utils.find_bonds_all(part_params, simulation)
     return simulation_next
 
 # Initialize and run N simulation steps
@@ -26,6 +27,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     path_cluster_n = os.path.join(folder, prefix, 'cluster_n.csv')
     path_cluster_agg = os.path.join(folder, prefix, 'cluster_agg.csv')
     path_particles = os.path.join(folder, prefix, 'particles.csv')
+    path_n_bonds = os.path.join(folder, prefix, 'n_bonds.csv')
     # Initializing elements
     coordinates = init.initialize_coordinates(sim_params, part_params)
     distances = init.initialize_distances(sim_params)
@@ -91,6 +93,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
             simulation['distances'] = distances
     simulation['interactions'] = step.update_interactions(sim_params, part_params, inter_params, simulation, threshold)
     simulation['clusters'] = step.update_clusters(simulation['interactions'])
+    simulation['n_bonds'] = utils.find_bonds_all(part_params, simulation)
     
     # -------------------------------- #
    
@@ -111,12 +114,14 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
         simulation_this_step = simulation_step(sim_params, part_params, inter_params, simulation_handle[previous], threshold)
         simulation_this_step['current_step'] = i
         simulation_handle[current] = simulation_this_step
+        n_bonds = simulation_handle[current]['n_bonds']
         clusters = simulation_handle[current]['clusters']
         cluster_number, cluster_agg, n_max = utils.obtain_cluster_features(sim_params, clusters)
         if (i == 1) or (i%sim_params['n_interval'] == 0):
             utils.write_coords_csv(path_coords, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
             utils.write_coords_xyz(path_xyz, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
-            utils.write_matrix(path_dists, sim_params, simulation_this_step['distances'], frame_number=i, new_file = new_file_toggle)
+            #utils.write_matrix(path_dists, sim_params, simulation_this_step['distances'], frame_number=i, new_file = new_file_toggle)
+            utils.write_clusters_feats(path_n_bonds, n_bonds, new_file = new_file_toggle)
             utils.write_clusters_feats(path_cluster_agg, cluster_agg, new_file = new_file_toggle)
             utils.write_clusters_int(path_cluster_n, cluster_number, new_file = new_file_toggle)
             utils.write_clusters_int(path_cluster_max, n_max, new_file = new_file_toggle)
@@ -126,4 +131,6 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
             pass
     print('\n----------------')
     print('Done!')
+    print(simulation_this_step['interactions'])
+    print(simulation_this_step['n_bonds'])
     return simulation_this_step

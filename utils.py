@@ -110,124 +110,240 @@ def count_particles(particles_params):
 # ----IMPORT PARAMETERS BLOCK----
 # -------------------------------
 
+# =============================================================================
+# def import_particle_params(filename):
+#     particle_parameters = {}
+#     new_parameter = 'dummy'
+#     multi_line = False
+#     start_new = False
+#     particle_number = 0
+#     particle_parameters[str(particle_number)] = {}
+#     new_list = []
+#     with open(filename, 'r') as file:
+#         for line in file:
+#             l = line.strip()
+#             l_split = l.split(',')
+# 
+#             if len(l_split) <= 2:
+#                 if len(new_list) == 0:
+#                     pass
+#                 elif len(new_list) == 1:
+#                     particle_parameters[str(particle_number)][new_parameter] = new_list[0]
+#                 else:
+#                     particle_parameters[str(particle_number)][new_parameter] = new_list
+#                 multi_line = False
+#                 new_list = []
+#                 if l_split[0] == '':
+#                     start_new = True
+#                     particle_number += 1
+#                 # Prepare next parameter entry
+#                 else:
+#                     if start_new == True:
+#                         particle_parameters[str(particle_number)] = {}
+#                         start_new = False
+#                     else:
+#                         pass
+#                     if l_split[0].lower() == 'yes' or l_split[0].lower() == 'true':
+#                         particle_parameters[str(particle_number)]['interacting'] = True
+#                     elif l_split[0].lower() == 'no' or l_split[0].lower() == 'false':
+#                         particle_parameters[str(particle_number)]['interacting'] = False
+#                     try:
+#                         particle_parameters[str(particle_number)][new_parameter] = float(l_split[0])
+#                     except:
+#                         new_parameter = l_split[0]
+#             else:
+#                 multi_line = True
+#                 mini_list = []
+#                 for i in range(len(l_split)-1):
+#                     mini_list.append(float(l_split[i]))
+#                 new_list.append(mini_list)
+# 
+#     for key, val in particle_parameters.items():
+#         for k, v in particle_parameters[key].items():
+#             if k == 'type' or k == 'number':
+#                 particle_parameters[key][k] = int(v)
+#             else:
+#                 pass
+#     
+#     grouped_particle_parameters = group_patch_params(particle_parameters)
+#     return grouped_particle_parameters
+# =============================================================================
+
+
 def import_particle_params(filename):
+    list_params = {"patches_radius", "patches_alphas"}
+    multiline_params = {"patches_positions"}
     particle_parameters = {}
-    new_parameter = 'dummy'
-    multi_line = False
-    start_new = False
     particle_number = 0
     particle_parameters[str(particle_number)] = {}
-    new_list = []
-    with open(filename, 'r') as file:
-        for line in file:
-            l = line.strip()
-            l_split = l.split(',')
+    current_param = None
+    with open(filename, "r") as f:
+        lines = [line.strip() for line in f]
+        
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Blank line indicates a new particle
+        if line == "":
+            particle_number += 1
+            if i < len(lines) - 1:
+                particle_parameters[str(particle_number)] = {}
+            i += 1
+            continue
+        current_param = line
+        i += 1
+        if i >= len(lines):
+            break
+        if current_param in multiline_params:
+            values = []
+            while i < len(lines):
+                l = lines[i]
+                # End inner loop when ending particle
+                if l == "":
+                    break
+                # End inner loop when next parameter name is reached
+                if "," not in l:
+                    break
+                row = [float(x) for x in l.split(",")[:-1]]
+                values.append(row)
+                i += 1
+            particle_parameters[str(particle_number)][current_param] = values
+            continue
+        # Single line value
+        l = lines[i]
+        tokens = l.split(",")[:-1]
+        if current_param == "interacting":
+            # Already converts to boolean!
+            particle_parameters[str(particle_number)][current_param] = (tokens[0].lower() in ("yes", "true"))
+        elif current_param in list_params:
+            particle_parameters[str(particle_number)][current_param] = [float(x) for x in tokens]
+        elif current_param in {"type", "number"}:
+            particle_parameters[str(particle_number)][current_param] = int(tokens[0])
+        elif current_param == "radius":
+            particle_parameters[str(particle_number)][current_param] = float(tokens[0])
+        else:
+            # Name or any future string parameter
+            try:
+                particle_parameters[str(particle_number)][current_param] = float(tokens[0])
+            except ValueError:
+                particle_parameters[str(particle_number)][current_param] = tokens[0]
+        i += 1
+    return group_patch_params(particle_parameters)
 
-            if len(l_split) <= 2:
-                if len(new_list) == 0:
-                    pass
-                elif len(new_list) == 1:
-                    particle_parameters[str(particle_number)][new_parameter] = new_list[0]
-                else:
-                    particle_parameters[str(particle_number)][new_parameter] = new_list
-                multi_line = False
-                new_list = []
-                if l_split[0] == '':
-                    start_new = True
-                    particle_number += 1
-                # Prepare next parameter entry
-                else:
-                    if start_new == True:
-                        particle_parameters[str(particle_number)] = {}
-                        start_new = False
-                    else:
-                        pass
-                    if l_split[0].lower() == 'yes' or l_split[0].lower() == 'true':
-                        particle_parameters[str(particle_number)]['interacting'] = True
-                    elif l_split[0].lower() == 'no' or l_split[0].lower() == 'false':
-                        particle_parameters[str(particle_number)]['interacting'] = False
-                    try:
-                        particle_parameters[str(particle_number)][new_parameter] = float(l_split[0])
-                    except:
-                        new_parameter = l_split[0]
-            else:
-                multi_line = True
-                mini_list = []
-                for i in range(len(l_split)-1):
-                    mini_list.append(float(l_split[i]))
-                new_list.append(mini_list)
 
-    for key, val in particle_parameters.items():
-        for k, v in particle_parameters[key].items():
-            if k == 'type' or k == 'number':
-                particle_parameters[key][k] = int(v)
-            else:
-                pass
-    
-    grouped_particle_parameters = group_patch_params(particle_parameters)
-    return grouped_particle_parameters
+# =============================================================================
+# def import_interaction_params(filename):
+#     interaction_parameters = {}
+#     new_parameter = 'dummy'
+#     multi_line = False
+#     start_new = False
+#     new_interaction = False
+#     new_list = []
+#     type0 = 0
+#     type1 = 0
+#     with open(filename, 'r') as file:
+#         for line in file:
+#             l = line.strip()
+#             l_split = l.split(',')
+#             
+#             if l_split[0] == 'type':
+#                 new_interaction = True
+#             else:
+#                 if new_interaction == True:
+#                     type0 = int(float(l_split[0]))
+#                     type1 = int(float(l_split[1]))
+#                     interaction_parameters[(type0, type1)] = {}
+#                     new_interaction = False
+#                 else:
+#                     if len(l_split) <= 2:
+#                         if len(new_list) == 0:
+#                             pass
+#                         elif len(new_list) == 1:
+#                             interaction_parameters[(type0, type1)][new_parameter] = new_list[0]
+#                         else:
+#                             interaction_parameters[(type0, type1)][new_parameter] = new_list
+#                         if len(l_split) == 1:
+#                             new_parameter = l_split[0]
+#                         else:
+#                             pass
+#                         multi_line = False
+#                         new_list = []
+#                     else:
+#                         multi_line = True
+#                     mini_list = []
+#                     for i in range(len(l_split)-1):
+#                         mini_list.append(float(l_split[i]))
+#                     if len(mini_list) == 0:
+#                         pass
+#                     else:
+#                         new_list.append(mini_list)
+#                         
+#     if len(new_list) == 1:
+#         interaction_parameters[(type0, type1)][new_parameter] = new_list[0]
+#     elif len(new_list) > 1:
+#         interaction_parameters[(type0, type1)][new_parameter] = new_list
+#                         
+#     for key, val in interaction_parameters.items():
+#         for k, v in interaction_parameters[key].items():
+#             if k == 'interact':
+#                 for i in range(len(interaction_parameters[key][k])):
+#                     if type(interaction_parameters[key][k]) == list:
+#                         try:                            
+#                             for j in range(len(interaction_parameters[key][k][i])):
+#                                 interaction_parameters[key][k][i][j] = int(interaction_parameters[key][k][i][j])
+#                         except:
+#                             interaction_parameters[key][k][i] = int(interaction_parameters[key][k][i])
+#                     else:
+#                         interaction_parameters[key][k] = int(interaction_parameters[key][k])
+#             else:
+#                 pass
+#                         
+#     return interaction_parameters
+# =============================================================================
+
 
 def import_interaction_params(filename):
+    multiline_params = {"interact", "p_ass", "p_diss"}
     interaction_parameters = {}
-    new_parameter = 'dummy'
-    multi_line = False
-    start_new = False
-    new_interaction = False
-    new_list = []
-    type0 = 0
-    type1 = 0
-    with open(filename, 'r') as file:
-        for line in file:
-            l = line.strip()
-            l_split = l.split(',')
-            
-            if l_split[0] == 'type':
-                new_interaction = True
-            else:
-                if new_interaction == True:
-                    type0 = int(float(l_split[0]))
-                    type1 = int(float(l_split[1]))
-                    interaction_parameters[(type0, type1)] = {}
-                    new_interaction = False
+    with open(filename, "r") as f:
+        lines = [line.strip() for line in f]
+    current_pair = None
+    current_param = None
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Blank line means next pairwise interaction block
+        if line == "":
+            i += 1
+            continue
+        current_param = line
+        i += 1
+        if current_param == "type":
+            tokens = [int(float(x)) for x in lines[i].split(",")[:-1]]
+            current_pair = tuple(tokens)
+            interaction_parameters[current_pair] = {}
+            i += 1
+            continue
+        if current_param in multiline_params:
+            values = []
+            while i < len(lines):
+                l = lines[i]
+                if l == "":
+                    break
+                if "," not in l:
+                    break
+                tokens = l.split(",")[:-1]
+                if current_param == "interact":
+                    row = [int(float(x)) for x in tokens]
                 else:
-                    if len(l_split) <= 2:
-                        if len(new_list) == 0:
-                            pass
-                        elif len(new_list) == 1:
-                            interaction_parameters[(type0, type1)][new_parameter] = new_list[0]
-                        else:
-                            interaction_parameters[(type0, type1)][new_parameter] = new_list
-                        if len(l_split) == 1:
-                            new_parameter = l_split[0]
-                        else:
-                            pass
-                        multi_line = False
-                        new_list = []
-                    else:
-                        multi_line = True
-                    mini_list = []
-                    for i in range(len(l_split)-1):
-                        mini_list.append(float(l_split[i]))
-                    if len(mini_list) == 0:
-                        pass
-                    else:
-                        new_list.append(mini_list)
-                        
-    if len(new_list) == 1:
-        interaction_parameters[(type0, type1)][new_parameter] = new_list[0]
-    elif len(new_list) > 1:
-        interaction_parameters[(type0, type1)][new_parameter] = new_list
-                        
-    for key, val in interaction_parameters.items():
-        for k, v in interaction_parameters[key].items():
-            if k == 'interact':
-                for i in range(len(interaction_parameters[key][k])):
-                    for j in range(len(interaction_parameters[key][k][i])):
-                        interaction_parameters[key][k][i][j] = int(interaction_parameters[key][k][i][j])
-            else:
-                pass
-                        
+                    row = [float(x) for x in tokens]
+                values.append(row)
+                i += 1
+            interaction_parameters[current_pair][current_param] = values
+            continue
     return interaction_parameters
+
 
 def import_simulation_params(filename):
     simulation_params = {}
@@ -464,11 +580,17 @@ def max_distance(part_params, manual_value = 0):
                     for kk, vv in part_params[key][k].items():
                         if kk == 'radius':
                             patch_candidates = part_params[key][k][kk]
-                            for i in range(len(patch_candidates)):
-                                if patch_candidates[i] > max_patch:
-                                    max_patch = patch_candidates[i]
+                            try: # If more than one patch (patch_candidates is a list)
+                                for i in range(len(patch_candidates)):
+                                    if patch_candidates[i] > max_patch:
+                                        max_patch = patch_candidates[i]
+                                    else:
+                                        pass
+                            except: # If only one patch (patch_candidates is a float)
+                                if patch_candidates > max_patch:
+                                    max_patch = patch_candidates
                                 else:
-                                    pass
+                                    pass                                
                         else:
                             pass
                 else:
@@ -571,6 +693,27 @@ def obtain_cluster_features(sim_params, clusters):
         cluster_agg.append(len(clusters[i]))
     n_max = np.max(np.array(cluster_agg))
     return cluster_number, cluster_agg, n_max
+
+# Find number of bonds per patch from interaction matrix
+def find_bonds(part_params, simulation, particle_index):
+    n_patches = len(simulation['patches'][particle_index])
+    bonds = [0 for i in range(n_patches)]
+    interactions = simulation['interactions']
+    for i in range(len(interactions)):
+        patch = int(interactions[particle_index][i][0])
+        if patch >= 0:
+            print(simulation['particles'][particle_index], patch)
+            bonds[patch] += 1
+            print(bonds)
+    return bonds
+        
+# Finds bonds for all particles from interacion matrix
+def find_bonds_all(part_params, simulation):
+    bonds_all = []
+    for idx, val in enumerate(simulation['particles']):
+        bonds_part = find_bonds(part_params, simulation, idx)
+        bonds_all.append(bonds_part)
+    return bonds_all
 
 def write_coords_xyz(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
     atoms_com = ['C', 'N', 'O', 'F', 'Ne']

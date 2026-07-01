@@ -37,7 +37,6 @@ def calculate_distance_vector_pbc(box_limits, vec1, vec2):
     elif dz < -box_limits: dz += l
     return np.array([dx, dy, dz])
 
-
 # Cartesian distance definition considering periodic boundary conditions from -box_limits to +box_limits
 @njit
 def calculate_distance_sq(box_limits, vec1, vec2):

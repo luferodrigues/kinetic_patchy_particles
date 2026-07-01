@@ -278,6 +278,8 @@ def update_interactions(sim_params, part_params, inter_params, simulation, thres
                                         prob = inter_params[pair_particles]['p_diss'][patch_type1][patch_type2]
                                         interactions_new[i][j] = utils.test_dissociation(patch_type1, patch_type2, prob)
                         interactions_new[j][i] = interactions_new[i][j]
+                        interactions_new[i][j][0] = interactions_new[j][i][1]
+                        interactions_new[i][j][1] = interactions_new[j][i][0]
             particle_list.remove(particle_list[0])
         # Force diagonal terms to be non-interacting (sometimes they were being set to interacting, not sure why)
         for k in range(0,2):
