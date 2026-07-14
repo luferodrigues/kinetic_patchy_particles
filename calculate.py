@@ -3,6 +3,16 @@ from scipy.spatial.transform import Rotation as R
 from numba import njit
 import utils
 
+# Calculates probability from energy in kBT units 
+def calculate_probability_from_energy(delta_energy):
+    prob = np.exp(-delta_energy)
+    return prob
+
+# Calculates energy in kBT units from probability
+def calculate_energy_from_probability(prob):
+    delta_energy = -np.log(prob)
+    return delta_energy
+
 # Simple distance calculation
 @njit
 def calculate_distance_simple(vec1, vec2):

@@ -715,6 +715,39 @@ def test_dissociation(patch1, patch2, prob):
     return inter_element
 
 
+# -------------------------------------------------
+# ------CALCULATE PROBABILITIES FROM ENERGIES------
+# -------------------------------------------------
+
+# For each ENTRY of the dictionary generated from importing an interacions_params file,
+# calculate p_ass and p_diss from energy matrix if not explicitly given in the file
+def add_probs_from_energies(inter_params_entry):
+    tol = 1e-8
+    keys = list(inter_params_entry.keys())
+    if 'p_ass' not in keys:
+        p_ass = np.zeros_like(inter_params_entry['energies'])
+        for r, energies_row in enumerate(inter_params_entry['energies']):
+            for i, energy_val in enumerate(energies_row):
+                p_ass[r,i] = calc.calculate_probability_from_energy(energy_val)
+                if p_ass[r,i] < tol or inter_params_entry['energies'][r][i] == 0:
+                    p_ass[r,i] = 0
+                elif p_ass[r,i] > 1.0 - tol:
+                    p_ass[r,i] = 1
+        inter_params_entry['p_ass'] = p_ass
+    
+    if 'p_diss' not in keys:
+        p_diss = np.zeros_like(inter_params_entry['energies'])
+        for r, energies_row in enumerate(inter_params_entry['energies']):
+            for i, energy_val in enumerate(energies_row):
+                p_diss[r,i] = calc.calculate_probability_from_energy(-energy_val)
+                if p_diss[r,i] < tol:
+                    p_diss[r,i] = 0
+                elif p_diss[r,i] > 1.0 - tol:
+                    p_diss[r,i] = 1
+        inter_params_entry['p_diss'] = p_diss
+            
+
+
 # ------------------------------
 # ------EXPORT FILES BLOCK------
 # ------------------------------
