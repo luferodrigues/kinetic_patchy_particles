@@ -27,7 +27,7 @@ def calculate_ass_diss_matrices(associations, dissociations, first_frame, last_f
             if candidate > max_ass_component:
                 max_ass_component = candidate
     if max_ass_component == 0:
-        association_matrix = []
+        associations_matrix = []
     max_diss_component = 0
     for diss in dissociations:
         if first_frame <= diss[0] <= last_frame:
@@ -35,7 +35,7 @@ def calculate_ass_diss_matrices(associations, dissociations, first_frame, last_f
             if candidate > max_diss_component:
                 max_diss_component = candidate
     if max_diss_component == 0:
-        dissociation_matrix = []
+        dissociations_matrix = []
     if max_ass_component > 0 or max_diss_component > 0:
         associations_matrix = np.zeros((max_ass_component, max_ass_component), dtype = int)
         dissociations_matrix = np.zeros((max_diss_component, max_diss_component), dtype = int)
