@@ -1018,3 +1018,21 @@ def write_transitions(path, transitions, frame_number = 0, new_file = False):
                     else:
                         fp.write(f'{t1}')
                 fp.write('\n')
+                
+# Import transitions from .csv file to two lists: one for associations and another for dissociations
+# Entries: association -> [frame_number, [a,b], a+b] or dissociation -> [frame_number, a+b, [a,b]]
+def import_transitions(path):
+    associations = []
+    dissociations = []
+    with open(path, 'r') as fp:
+        counter = 1
+        for line in fp:
+            split = line.split(',')
+            if split[2] == '-':
+                dissociations.append([int(split[0]), [int(split[1])], [int(split[3]), int(split[4])]])
+            elif split[3] == '-':
+                associations.append([int(split[0]), [int(split[1]), int(split[2])], [int(split[4])]])
+            else:
+                print(f'Strange line at line {counter}')
+            counter += 1
+    return associations, dissociations

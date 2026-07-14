@@ -39,5 +39,5 @@ inter_params = utils.import_interaction_params(file_inters)
 #paths = utils.create_files(prefix = prefix_out, folder = folder_out)
 sim.run_simulation(sim_params, part_params, inter_params, prefix = prefix_out, folder = folder_out, transitions = trans_out)
 end_time = time.perf_counter()
-print(f"Finished in {(end_time - start_time)/60} minutes")
+print(f"Finished in {round((end_time - start_time)/60, 1)} minutes")
 
