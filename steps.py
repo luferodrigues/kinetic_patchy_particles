@@ -221,7 +221,7 @@ def apply_periodic_boundaries(coordinates, box_limits, n_dimensions):
 def update_interactions(sim_params, part_params, inter_params, simulation, threshold):
     particle_list = list(range(0,simulation['distances'].shape[0]))
     box_limits = sim_params['box_limits']
-    interactions_new = 1 * simulation['interactions']
+    interactions_new = simulation['interactions'].copy()
     for i in range(0, len(particle_list)):
         if len(particle_list) == 1:
             pass
@@ -264,7 +264,7 @@ def update_interactions(sim_params, part_params, inter_params, simulation, thres
                                 r_p2 = params2['patches']['radius'][b]
                                 r_limit = r_hs1 + r_p1 + r_hs2 + r_p2
                                 dist_check = utils.check_distance(r_limit, distance12)
-                                # Checks if oriented patches are within intraction distance
+                                # Checks if oriented patches are within interaction distance
                                 if dist_check == True:
                                     inter_ij = simulation['interactions'][i][j]
                                     patch_type1 = pair_patches[0]
@@ -277,9 +277,9 @@ def update_interactions(sim_params, part_params, inter_params, simulation, thres
                                     else:
                                         prob = inter_params[pair_particles]['p_diss'][patch_type1][patch_type2]
                                         interactions_new[i][j] = utils.test_dissociation(patch_type1, patch_type2, prob)
-                        interactions_new[j][i] = interactions_new[i][j]
-                        interactions_new[i][j][0] = interactions_new[j][i][1]
-                        interactions_new[i][j][1] = interactions_new[j][i][0]
+                        interactions_new[j][i] = interactions_new[i][j].copy()
+                        interactions_new[j][i][0], interactions_new[j][i][1] = \
+                        interactions_new[j][i][1], interactions_new[j][i][0]
             particle_list.remove(particle_list[0])
         # Force diagonal terms to be non-interacting (sometimes they were being set to interacting, not sure why)
         for k in range(0,2):
@@ -326,7 +326,7 @@ def update_clusters(interactions):
 #             candidate_coordinate = coordinates[index]
 #         
 #         # MOVE THE WHOLE CLUSTER TOGETHER
-#     # TRY TO MOVE A "SAFE DISTANCE AWAY" (DON'Y TRY JUST A SINGLE MOVE)
+#     # TRY TO MOVE A "SAFE DISTANCE AWAY" (DON'T TRY JUST A SINGLE MOVE)
 #     return 0
 # =============================================================================
 

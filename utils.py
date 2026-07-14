@@ -645,32 +645,6 @@ def check_alignment_all(patches1, patches2, alphas1, alphas2, d_vector):
                 #return check, aligned_pair
     return check, aligned_pair
 
-def test_association(patch1, patch2, prob):
-    random = np.random.uniform(low = 0, high = 1)
-    if random < prob:
-        if patch1 > patch2:
-            inter_element = [patch2,patch1]
-        else:
-            inter_element = [patch1,patch2]
-    else:
-        inter_element = [-1,-1]
-    return inter_element
-
-def test_dissociation(patch1, patch2, prob):
-    random = np.random.uniform(low = 0, high = 1)
-    if random < prob:
-        inter_element = [-1,-1]
-    else:
-        if patch1 > patch2:
-            inter_element = [patch2,patch1]
-        else:
-            inter_element = [patch1,patch2]
-    return inter_element
-
-# ------------------------------
-# ------EXPORT FILES BLOCK------
-# ------------------------------
-
 def count_all_patches(sim_params, patches):
     n_dims = sim_params['n_dimensions']
     count = 0
@@ -702,9 +676,10 @@ def find_bonds(part_params, simulation, particle_index):
     for i in range(len(interactions)):
         patch = int(interactions[particle_index][i][0])
         if patch >= 0:
-            print(simulation['particles'][particle_index], patch)
+            #print(interactions[particle_index][i])
+            #print(bonds)
+            #print(f"Particle {particle_index} (type {simulation['particles'][particle_index]}), Bonds: {len(bonds)}, Patch index: {patch}")
             bonds[patch] += 1
-            print(bonds)
     return bonds
         
 # Finds bonds for all particles from interacion matrix
@@ -715,9 +690,55 @@ def find_bonds_all(part_params, simulation):
         bonds_all.append(bonds_part)
     return bonds_all
 
-def write_coords_xyz(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
+def test_association(patch1, patch2, prob):
+    random = np.random.uniform(low = 0, high = 1)
+    if random < prob:
+        inter_element = [patch1,patch2]
+        #if patch1 > patch2:
+        #    inter_element = [patch2,patch1]
+        #else:
+        #    inter_element = [patch1,patch2]
+    else:
+        inter_element = [-1,-1]
+    return inter_element
+
+def test_dissociation(patch1, patch2, prob):
+    random = np.random.uniform(low = 0, high = 1)
+    if random < prob:
+        inter_element = [-1,-1]
+    else:
+        inter_element = [patch1,patch2]
+        #if patch1 > patch2:
+        #    inter_element = [patch2,patch1]
+        #else:
+        #    inter_element = [patch1,patch2]
+    return inter_element
+
+
+# ------------------------------
+# ------EXPORT FILES BLOCK------
+# ------------------------------
+
+# Write .tcl file for VMD visualization
+def write_vmd_config(path, sim_params, part_params, simulation):
     atoms_com = ['C', 'N', 'O', 'F', 'Ne']
     atoms_patches = ['H', 'He', 'Li', 'Be', 'B']
+    n_parts = len(simulation['coordinates'])
+    n_patches = count_all_patches(sim_params, simulation['patches'])
+    n_total = n_parts + n_patches
+    with open(path, 'w') as fp:
+        fp.write('package require pbctools\n')
+        fp.write('\n')
+        fp.write('mol modstyle 0 top VDW\n')
+        fp.write('foreach {elem rad} {\n')
+        # LOOP
+        fp.write(f'    ')
+    return 0
+
+# Change patch per particle to not repeat the same element for different particles
+def write_coords_xyz(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
+    atoms_com = ['C', 'N', 'O', 'F', 'Ne', 'Al', 'Si', 'P', 'S', 'Cl']
+    atoms_patches = ['H', 'He', 'Li', 'Be', 'B', 'Na', 'Mg', 'K', 'Ca', 'Sc']
     n_parts = len(simulation['coordinates'])
     n_patches = count_all_patches(sim_params, simulation['patches'])
     n_total = n_parts + n_patches
@@ -734,6 +755,7 @@ def write_coords_xyz(path, sim_params, part_params, simulation, frame_number = 0
             coords = simulation['coordinates'][i]
             fp.write(f"{atoms_com[part_type]}    {coords[0]}    {coords[1]}    {coords[2]}\n")
             patches_i = simulation['patches'][i]
+            # Change here!
             patch_index = 0
             for x in patches_i:
                 if isinstance(x, (list, tuple, np.ndarray)) and len(x) == sim_params['n_dimensions']:
@@ -770,6 +792,21 @@ def write_matrix(path, sim_params, matrix, frame_number = 0, new_file = False):
                 fp.write(f'{matrix[i][j]},')
             fp.write('\n')
             
+def write_clusters(path, clusters, frame_number = 0, new_file = False):
+    if new_file == False:
+        mode = 'a'
+    else:
+        mode = 'w'
+    with open(path, mode) as fp:
+        fp.write(f'Frame {frame_number}\n')
+        for idx, cluster in enumerate(clusters):
+            for i, val in enumerate(cluster):
+                if i == (len(cluster)-1):
+                    fp.write(f'{val}\n')
+                else:
+                    fp.write(f'{val},')
+        fp.write('\n')
+            
 def write_clusters_feats(path, cluster_feats, frame_number = 0, new_file = False):
     #print(cluster_feats)
     if new_file == False:
@@ -797,4 +834,187 @@ def write_clusters_int(path, cluster_int, frame_number = 0, new_file = False):
 def write_particle_types(path, simulation):
     with open(path, 'w') as fp:
         for i in range(len(simulation['particles'])):
-            fp.write(f"{simulation['particles'][i]}\n")     
+            fp.write(f"{simulation['particles'][i]}\n")
+            
+            
+# ------------------------------
+# ------EXPORT FILES BLOCK------
+# ------------------------------
+
+# Converts particle indices into cluster indices
+def particle_cluster_indexing(simulation, clusters_prev):
+    which_cluster_prev = -1 * np.ones(len(simulation['particles']))
+    for c, cluster in enumerate(clusters_prev):
+        for idx, part in enumerate(cluster):
+            which_cluster_prev[part] = c
+    return which_cluster_prev
+
+# Creates list of clusters labeled only with the cluster index (e.g., [[0,0,0], [1,1], [2,2,2,2,2], ...])
+def clusters_origins_reference(clusters_prev):
+    reference_clusters = []
+    for c, cluster in enumerate(clusters_prev):
+        origin = []
+        for p in range(len(cluster)):
+            origin.append(c)
+        reference_clusters.append(origin)
+    return reference_clusters
+
+# Creates list with new clusters indicating from which cluster the particles came from (e.g, [0,0,1], [1,-1], [2,2,2,2,2], ...])
+def find_cluster_origins(simulation, clusters_prev):
+    which_cluster_prev = particle_cluster_indexing(simulation, clusters_prev)
+    part_indices = range(len(simulation['particles']))
+    cluster_ids_from_prev = [cluster.copy() for cluster in simulation['clusters']]
+    # Sets every element as -1 to "forget" clusters
+    for c in range(len(cluster_ids_from_prev)):
+        for i in range(len(cluster_ids_from_prev[c])):
+            cluster_ids_from_prev[c][i] = -1
+    # Iterates through clusters
+    for idx in part_indices:
+        for c, cluster in enumerate(simulation['clusters']):
+            for i, cl in enumerate(cluster):
+                if idx == cl:
+                    cluster_ids_from_prev[c][i] = int(which_cluster_prev[idx])
+    return cluster_ids_from_prev
+
+# Assitant function for calculating the transitions matrix
+def count_dissociated_monomers(previous, current):
+    counts = []
+    for c, clust in enumerate(previous):
+        total = len(clust)
+        counter = 0
+        for i, curr in enumerate(current):
+            unique = np.unique(curr, return_counts=True)
+            types = unique[0]
+            cnts = unique[1]
+            for j in range(len(types)):
+                if c == types[j]:
+                    counter += cnts[j]
+        counts.append(int(total - counter))
+    return counts
+
+# Builds the transitions matrix (previous clusters are read on rows and current on columns). Extra row and column for monomers
+def generate_transitions_matrix(previous, current):
+    matrix_len = np.max([len(previous), len(current)]) + 1
+    tracking_matrix = np.zeros((matrix_len, matrix_len), dtype = int)
+    for c, clust in enumerate(current):
+        unique = np.unique(clust, return_counts=True)
+        origins = unique[0]
+        counts = unique[1]
+        for o in range(len(origins)):
+            tracking_matrix[origins[o],c] = int(counts[o])
+    dissociated_monomers = count_dissociated_monomers(previous, current)
+    for m, mon in enumerate(dissociated_monomers):
+        tracking_matrix[m,-1] = int(mon)
+    return tracking_matrix
+
+# Finds transitions from row (dissociations)
+def assign_transitions_row(row):
+    transitions = []
+    non_zero_idx = np.nonzero(row)[0]
+    if len(non_zero_idx) > 1:
+        non_zero_pops = row[non_zero_idx]
+        prev_agg = np.sum(non_zero_pops)
+        passed = False
+        for i in range(len(non_zero_idx)):
+            monomers_idx = len(row)-1
+            monomers = row[monomers_idx]
+            if passed == True:
+                if i == monomers_idx:
+                    while monomers > 0:
+                        this_trans = [[int(prev_agg)], [int(prev_agg-1),1]]
+                        prev_agg -= 1
+                        monomers -= 1
+                        transitions.append(this_trans)
+                else:
+                    dissociated = non_zero_pops[i]
+                    this_trans = [[int(prev_agg)], [int(prev_agg-dissociated), int(dissociated)]]
+                    prev_agg -= dissociated
+                    transitions.append(this_trans)
+            else:
+                passed = True
+    # Special case: total dissociation of cluster into monomers
+    elif (len(non_zero_idx)) == 1 and (non_zero_idx[0] == len(row)-1):
+        monomers = row[non_zero_idx[0]]
+        while monomers > 1:
+            this_trans = [[int(monomers)], [int(monomers-1),1]]
+            monomers -= 1
+            transitions.append(this_trans)
+    return transitions
+
+# Finds transitions from column (associations)
+def assign_transitions_column(column):
+    transitions = []
+    non_zero_idx = np.nonzero(column)[0]
+    if len(non_zero_idx) > 1:
+        non_zero_pops = column[non_zero_idx]
+        passed = False
+        curr_agg = 0
+        for i in range(len(non_zero_idx)):
+            monomers_idx = len(column)-1
+            monomers = column[monomers_idx]
+            if passed == True:
+                if i == monomers_idx:
+                    while monomers > 0:
+                        this_trans = [[int(curr_agg),1],[int(curr_agg+1)]]
+                        curr_agg += 1
+                        monomers -= 1
+                        transitions.append(this_trans)
+                else:
+                    associated = non_zero_pops[i]
+                    this_trans = [[int(curr_agg), int(associated)], [int(curr_agg+associated)]]
+                    curr_agg += associated
+                    transitions.append(this_trans)
+            else:
+                curr_agg = non_zero_pops[i]
+                passed = True
+    # Special case: formation of new cluster from monomers
+    elif (len(non_zero_idx)) == 1 and (non_zero_idx[0] == len(column)-1):
+        monomers = column[non_zero_idx[0]]
+        counter = 0
+        while monomers > 1:
+            this_trans = [[counter + 1, 1], [counter + 2]]
+            monomers -= 1
+            counter += 1
+            transitions.append(this_trans)
+    return transitions
+
+# Find all transitions from transitions matrix 
+# (output is a list (all) of list (transitions from/to specific cluster) of lists (each transition))
+def assign_transitions(transitions_matrix):
+    transitions = []
+    for r, row in enumerate(transitions_matrix):
+        limit = len(transitions_matrix)-1
+        if r < limit:
+            trans = assign_transitions_row(row)
+            for t in trans:
+                transitions.append(trans)
+    for c, col in enumerate(transitions_matrix.T):
+        limit = len(transitions_matrix.T)-1
+        if c < limit:
+            trans = assign_transitions_column(col)
+            for t in trans:
+                transitions.append(trans)
+    return transitions
+
+# Exports transitions to .csv file
+def write_transitions(path, transitions, frame_number = 0, new_file = False):
+    if new_file == False:
+        mode = 'a'
+    else:
+        mode = 'w'
+    with open(path, mode) as fp:
+        for trans_clust in transitions:
+            for trans in trans_clust:
+                fp.write(f'{frame_number},')
+                for i, t0 in enumerate(trans[0]):
+                    if i < len(trans[0])-1:
+                        fp.write(f'{t0},')
+                    else:
+                        fp.write(f'{t0}')
+                fp.write(',-,')
+                for j, t1 in enumerate(trans[1]):
+                    if j < len(trans[1])-1:
+                        fp.write(f'{t1},')
+                    else:
+                        fp.write(f'{t1}')
+                fp.write('\n')

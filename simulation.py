@@ -18,16 +18,18 @@ def simulation_step(sim_params, part_params, inter_params, simulation, threshold
     return simulation_next
 
 # Initialize and run N simulation steps
-def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = '', manual_dist = 0):
+def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = '', transitions = True, manual_dist = 0):
     simulation = {}
     path_coords = os.path.join(folder, prefix, 'trajectory.csv')
     path_xyz = os.path.join(folder, prefix, 'visualization.xyz')
-    path_dists = os.path.join(folder, prefix, 'distances.csv')
+    #path_dists = os.path.join(folder, prefix, 'distances.csv')
+    path_clusters = os.path.join(folder, prefix, 'clusters.csv')
     path_cluster_max = os.path.join(folder, prefix, 'cluster_max.csv')
     path_cluster_n = os.path.join(folder, prefix, 'cluster_n.csv')
     path_cluster_agg = os.path.join(folder, prefix, 'cluster_agg.csv')
     path_particles = os.path.join(folder, prefix, 'particles.csv')
     path_n_bonds = os.path.join(folder, prefix, 'n_bonds.csv')
+    path_transitions = os.path.join(folder, prefix, 'transitions.csv')
     # Initializing elements
     coordinates = init.initialize_coordinates(sim_params, part_params)
     distances = init.initialize_distances(sim_params)
@@ -101,6 +103,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     
     simulation_handle = [simulation, simulation.copy()]
     new_file_toggle = True
+    new_file_transitions_toggle = True
     for i in range(1, sim_params['n_steps']+1):
         if i%(sim_params['n_steps'] / 100) == 0:
             print(f"Progress: {int(i/sim_params['n_steps']*100)}%", end = '\r')
@@ -111,16 +114,26 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
             previous = 0
         else:
             pass
+        clusters_previous = simulation_handle[previous]['clusters']
         simulation_this_step = simulation_step(sim_params, part_params, inter_params, simulation_handle[previous], threshold)
         simulation_this_step['current_step'] = i
         simulation_handle[current] = simulation_this_step
         n_bonds = simulation_handle[current]['n_bonds']
         clusters = simulation_handle[current]['clusters']
         cluster_number, cluster_agg, n_max = utils.obtain_cluster_features(sim_params, clusters)
+        # After the first step we can look for transitions, which are recorded at every step
+        if (i > 1) and (len(clusters) > 0) and (transitions == True):
+            clusters_tracking_previous = utils.clusters_origins_reference(clusters_previous)
+            clusters_tracking_current = utils.find_cluster_origins(simulation_this_step, clusters_previous)
+            transitions_matrix = utils.generate_transitions_matrix(clusters_tracking_previous, clusters_tracking_current)
+            cluster_transitions = utils.assign_transitions(transitions_matrix)
+            utils.write_transitions(path_transitions, cluster_transitions, frame_number = i, new_file = new_file_transitions_toggle)
+            new_file_transitions_toggle = False
         if (i == 1) or (i%sim_params['n_interval'] == 0):
             utils.write_coords_csv(path_coords, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
             utils.write_coords_xyz(path_xyz, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
             #utils.write_matrix(path_dists, sim_params, simulation_this_step['distances'], frame_number=i, new_file = new_file_toggle)
+            utils.write_clusters(path_clusters, clusters, frame_number = i, new_file = new_file_toggle)
             utils.write_clusters_feats(path_n_bonds, n_bonds, new_file = new_file_toggle)
             utils.write_clusters_feats(path_cluster_agg, cluster_agg, new_file = new_file_toggle)
             utils.write_clusters_int(path_cluster_n, cluster_number, new_file = new_file_toggle)
@@ -131,6 +144,4 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
             pass
     print('\n----------------')
     print('Done!')
-    print(simulation_this_step['interactions'])
-    print(simulation_this_step['n_bonds'])
     return simulation_this_step
