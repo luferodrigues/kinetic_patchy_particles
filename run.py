@@ -38,7 +38,7 @@ inter_params = utils.import_interaction_params(file_inters)
 
 # If no probabilities are given, calculate them from energies
 for key in inter_params.keys():
-    utils.calculate_probabilities_from_energies(inter_params[key])
+    utils.add_probs_from_energies(inter_params[key])
 
 #paths = utils.create_files(prefix = prefix_out, folder = folder_out)
 sim.run_simulation(sim_params, part_params, inter_params, prefix = prefix_out, folder = folder_out, transitions = trans_out)

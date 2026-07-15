@@ -303,7 +303,7 @@ def import_particle_params(filename):
 
 
 def import_interaction_params(filename):
-    multiline_params = {"interact", "p_ass", "p_diss"}
+    multiline_params = {"interact", "energies", "p_ass", "p_diss"}
     interaction_parameters = {}
     with open(filename, "r") as f:
         lines = [line.strip() for line in f]
@@ -682,7 +682,7 @@ def find_bonds(part_params, simulation, particle_index):
             bonds[patch] += 1
     return bonds
         
-# Finds bonds for all particles from interacion matrix
+# Finds bonds for all particles from interaction matrix
 def find_bonds_all(part_params, simulation):
     bonds_all = []
     for idx, val in enumerate(simulation['particles']):

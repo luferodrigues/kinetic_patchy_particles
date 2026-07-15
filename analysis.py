@@ -44,9 +44,11 @@ def calculate_ass_diss_matrices(associations, dissociations, first_frame, last_f
             row = ass[1][0]-1
             col = ass[1][1]-1
             associations_matrix[row, col] += 1
+            associations_matrix[col, row] += 1
         for diss in dissociations:
             row = diss[2][0]-1
             col = diss[2][1]-1
             dissociations_matrix[row, col] += 1
+            dissociations_matrix[col, row] += 1
         
     return associations_matrix, dissociations_matrix
