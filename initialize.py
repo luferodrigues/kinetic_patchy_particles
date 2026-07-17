@@ -79,3 +79,11 @@ def initialize_particles(particles_params):
             counter_parts += 1
         counter_types = 0
     return np.array(particles_list, dtype = int)
+
+# Initialize empty list of number of bonds from the list of lists of patch coordinates
+def initialize_n_bonds(patches_all):
+    n_bonds = []
+    for p, patches in enumerate(patches_all):
+        bonds = [0 for i in range(len(patches))]
+        n_bonds.append(bonds)
+    return n_bonds

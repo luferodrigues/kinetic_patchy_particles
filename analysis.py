@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import ConvexHull
 
 # Import transitions from .csv file to two lists: one for associations and another for dissociations
 # Entries: association -> [frame_number, [a,b], a+b] or dissociation -> [frame_number, a+b, [a,b]]
@@ -52,3 +53,27 @@ def calculate_ass_diss_matrices(associations, dissociations, first_frame, last_f
             dissociations_matrix[col, row] += 1
         
     return associations_matrix, dissociations_matrix
+
+def build_condensates(distances, threshold):
+    n = distances.shape[0]
+    visited = set()
+    condensates = []
+    close = distances < threshold
+    for i in range(n):
+        if i in visited:
+            continue
+        stack = [i]
+        condensate = []
+        while len(stack) > 0:
+            p = stack.pop()
+            if p in visited:
+                continue
+            visited.add(p)
+            condensate.append(p)
+            neighbors = np.where(close[p])[0]
+            for n in neighbors:
+                if n not in visited:
+                    stack.append(n)
+        if len(condensate) > 1:
+            condensates.append(condensate)
+    return condensates

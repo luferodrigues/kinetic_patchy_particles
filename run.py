@@ -16,11 +16,13 @@ parser.add_argument('inters', help = 'Interaction parameters (.par) file') # pos
 parser.add_argument('-f', '--folder', default = 'outputs', help = 'Output folder (Default: outputs)')
 parser.add_argument('-p', '--prefix', default = '', help = 'Prefix for output files (Default: None)')
 parser.add_argument('-nt', '--no-transitions', help = 'Flag for disabling transitions calculations', action='store_false')
+parser.add_argument('-cs', '--no-clusters-steps', help = 'Flag for disabling storing clusters for every step', action='store_false')
 #parser.add_argument('-v', '--verbose', help = 'Verbose flag for less text', action='store_true')
 args = parser.parse_args()
 prefix_out = args.prefix
 folder_out = args.folder
 trans_out = args.no_transitions
+clust_out = args.no_clusters_steps
 
 # Parameter files from argparse
 file_sim = args.params
@@ -41,7 +43,7 @@ for key in inter_params.keys():
     utils.add_probs_from_energies(inter_params[key])
 
 #paths = utils.create_files(prefix = prefix_out, folder = folder_out)
-sim.run_simulation(sim_params, part_params, inter_params, prefix = prefix_out, folder = folder_out, transitions = trans_out)
+sim.run_simulation(sim_params, part_params, inter_params, prefix = prefix_out, folder = folder_out, transitions = trans_out, clusters_steps = clust_out)
 end_time = time.perf_counter()
 print(f"Finished in {round((end_time - start_time)/60, 1)} minutes")
 

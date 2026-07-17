@@ -171,7 +171,7 @@ def count_particles(particles_params):
 
 
 def import_particle_params(filename):
-    list_params = {"patches_radius", "patches_alphas"}
+    list_params = {"patches_radius", "patches_alphas", "patches_bonds"}
     multiline_params = {"patches_positions"}
     particle_parameters = {}
     particle_number = 0
@@ -852,6 +852,20 @@ def write_clusters_feats(path, cluster_feats, frame_number = 0, new_file = False
                 fp.write(f'{cluster_feats[i]}')
             else:
                 fp.write(f'{cluster_feats[i]},')
+        fp.write('\n')
+        
+def write_n_bonds(path, particle_index, n_bonds, frame_number = 0, new_file = False):
+    if new_file == False:
+        mode = 'a'
+    else:
+        mode = 'w'
+    with open(path, mode) as fp:
+        fp.write(f'{frame_number},{particle_index},')
+        for i in range(len(n_bonds)):
+            if i == len(n_bonds):
+                fp.write(f'{n_bonds[i]}')
+            else:
+                fp.write(f'{n_bonds[i]},')
         fp.write('\n')
         
 def write_clusters_int(path, cluster_int, frame_number = 0, new_file = False):

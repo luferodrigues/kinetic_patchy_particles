@@ -196,7 +196,7 @@ def sq_from_gr(parameters, q, r, gr):
         integral[i] = np.trapezoid(integrand, x = r)
     return 1 + n/v * 4*np.pi * integral
 
-def sq_from_frame(sim_params, simulation, qmax=None, nq=100):
+def sq_from_frame(sim_params, simulation, frame_number = -1, qmax=None, nq=100):
     box_length = 2*sim_params['box_limits']
     positions = simulation
     positions = np.asarray(positions)

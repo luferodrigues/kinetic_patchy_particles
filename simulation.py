@@ -11,14 +11,16 @@ def simulation_step(sim_params, part_params, inter_params, simulation, threshold
     simulation_next['distances'] = step.calculate_distance_matrix(simulation_next['coordinates'], sim_params['box_limits'])
     step.apply_periodic_boundaries(simulation_next['coordinates'], sim_params['box_limits'], sim_params['n_dimensions'])
     simulation_next['particles'] = simulation['particles']
-    # We need to update the interactions and clusters now
+    # Copying n_bonds from the previous step to run update_interactions, and the I'll update the number of bonds!
+    simulation_next['n_bonds'] = simulation['n_bonds']
+    # We need to update the interactions, clusters and n_bonds now
     simulation_next['interactions'] = step.update_interactions(sim_params, part_params, inter_params, simulation_next, threshold)
     simulation_next['clusters'] = step.update_clusters(simulation_next['interactions'])
     simulation_next['n_bonds'] = utils.find_bonds_all(part_params, simulation)
     return simulation_next
 
 # Initialize and run N simulation steps
-def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = '', transitions = True, manual_dist = 0):
+def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = '', transitions = True, clusters_steps = True, manual_dist = 0):
     simulation = {}
     path_coords = os.path.join(folder, prefix, 'trajectory.csv')
     path_xyz = os.path.join(folder, prefix, 'visualization.xyz')
@@ -43,7 +45,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
         'distances': distances,
         'interactions': interactions,
         'clusters': clusters,
-        'particles': particles,
+        'particles': particles
         }
     utils.write_particle_types(path_particles, simulation)
     for key in part_params.keys():
@@ -71,6 +73,8 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     threshold = utils.max_distance(part_params, manual_dist)
     patches = init.initialize_patches(sim_params, part_params, simulation)
     simulation['patches'] = patches
+    n_bonds = init.initialize_n_bonds(patches)
+    simulation['n_bonds'] = n_bonds
     radii_types = np.array([part_params[str(t)]['radius'] for t in range(len(part_params))])
     radii_all = radii_types[particle_types]
     simulation['radii'] = radii_all
@@ -104,6 +108,7 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     simulation_handle = [simulation, simulation.copy()]
     new_file_toggle = True
     new_file_transitions_toggle = True
+    new_file_bonds_toggle = True
     for i in range(1, sim_params['n_steps']+1):
         if i%(sim_params['n_steps'] / 100) == 0:
             print(f"Progress: {int(i/sim_params['n_steps']*100)}%", end = '\r')
@@ -129,16 +134,22 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
             cluster_transitions = utils.assign_transitions(transitions_matrix)
             utils.write_transitions(path_transitions, cluster_transitions, frame_number = i, new_file = new_file_transitions_toggle)
             new_file_transitions_toggle = False
+            if clusters_steps == True:
+                utils.write_clusters(path_clusters, clusters, frame_number = i, new_file = new_file_toggle)
         if (i == 1) or (i%sim_params['n_interval'] == 0):
             utils.write_coords_csv(path_coords, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
             utils.write_coords_xyz(path_xyz, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
             #utils.write_matrix(path_dists, sim_params, simulation_this_step['distances'], frame_number=i, new_file = new_file_toggle)
-            utils.write_clusters(path_clusters, clusters, frame_number = i, new_file = new_file_toggle)
-            utils.write_clusters_feats(path_n_bonds, n_bonds, new_file = new_file_toggle)
+            if clusters_steps == False:
+                utils.write_clusters(path_clusters, clusters, frame_number = i, new_file = new_file_toggle)
             utils.write_clusters_feats(path_cluster_agg, cluster_agg, new_file = new_file_toggle)
             utils.write_clusters_int(path_cluster_n, cluster_number, new_file = new_file_toggle)
             utils.write_clusters_int(path_cluster_max, n_max, new_file = new_file_toggle)
-            if (i == 1):
+            for cluster in clusters:
+                for particle_index in cluster:
+                    utils.write_n_bonds(path_n_bonds, particle_index, n_bonds[particle_index], frame_number=i, new_file = new_file_bonds_toggle)
+                    new_file_bonds_toggle = False
+            if new_file_toggle == True:
                 new_file_toggle = False
         else:
             pass
