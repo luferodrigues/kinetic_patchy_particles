@@ -260,9 +260,16 @@ def update_interactions(sim_params, part_params, inter_params, simulation, thres
                                 b = pair_patches[1]
                                 r_hs1 = params1['radius']
                                 r_hs2 = params2['radius']
-                                r_p1 = params1['patches']['radius'][a]
-                                r_p2 = params2['patches']['radius'][b]
-                                r_limit = r_hs1 + r_p1 + r_hs2 + r_p2
+                                try:
+                                    r_int = utils.get_pair_interaction_dist(inter_params, particle1, particle2, a, b)
+                                except:
+                                    try:
+                                        r_p1 = params1['patches']['radius'][a]
+                                        r_p2 = params2['patches']['radius'][b]
+                                        r_int = r_p1 + r_p2
+                                    except:
+                                        raise SystemExit('Please define interaction distances for each patch')
+                                r_limit = r_hs1 + r_hs2 + r_int
                                 dist_check = utils.check_distance(r_limit, distance12)
                                 # Checks if oriented patches are within interaction distance
                                 if dist_check == True:

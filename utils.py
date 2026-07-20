@@ -303,7 +303,7 @@ def import_particle_params(filename):
 
 
 def import_interaction_params(filename):
-    multiline_params = {"interact", "energies", "p_ass", "p_diss"}
+    multiline_params = {"interact", "energies", "distances", "p_ass", "p_diss"}
     interaction_parameters = {}
     with open(filename, "r") as f:
         lines = [line.strip() for line in f]
@@ -548,6 +548,11 @@ def check_particle_interaction(inter_params, particle1, particle2):
         else:
             pass
     return interact
+
+def get_pair_interaction_dist(inter_params, particle1, particle2, patch1, patch2):
+    pair = (particle1, particle2)
+    dist = inter_params[pair]['distances'][patch1][patch2]
+    return dist
 
 def check_patch_interaction(interaction_params_type, patch1, patch2):
     matrix = interaction_params_type['interact']
