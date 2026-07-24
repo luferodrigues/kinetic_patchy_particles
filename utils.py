@@ -493,10 +493,16 @@ def copy_dict(entry_dict):
 @njit
 def update_cell_list(coords, box_limits, cell_size, n_cells_xyz):
     total_cells = n_cells_xyz[0] * n_cells_xyz[1] * n_cells_xyz[2]
+    # List containing the first particle per cell (indexed in a flattened manner)
     head = np.full(total_cells, -1, dtype=np.int32)
+    # List of the particle that follows head[idx] in cell idx, so if I have a cell with
+    # the particles 10, 34, 4, I will have head[idx] = 10, and linked_list will have the following
+    # elements: linked_list[10] = 34, linked_list[34] = 4, linked_list[4] = -1 (-1 means no next particle)
     linked_list = np.full(len(coords), -1, dtype=np.int32)
     for i in range(len(coords)):
         # Find cell indices (0 to n_cells-1)
+        # Since my box_limits variable makes the box size range from -box_limits to box_limits,
+        # we shift it, for example, from the [-10,10] reference, to [0,20]
         ix = int((coords[i, 0] + box_limits) / cell_size)
         iy = int((coords[i, 1] + box_limits) / cell_size)
         iz = int((coords[i, 2] + box_limits) / cell_size)
@@ -504,6 +510,7 @@ def update_cell_list(coords, box_limits, cell_size, n_cells_xyz):
         ix = max(0, min(ix, n_cells_xyz[0]-1))
         iy = max(0, min(iy, n_cells_xyz[1]-1))
         iz = max(0, min(iz, n_cells_xyz[2]-1))
+        # 1D flattened form of indexing instead of using a tuple
         c_idx = ix + n_cells_xyz[0] * (iy + n_cells_xyz[1] * iz)
         linked_list[i] = head[c_idx]
         head[c_idx] = i
