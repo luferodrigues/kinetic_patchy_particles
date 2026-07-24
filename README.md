@@ -1,4 +1,4 @@
-# kinetic_patchy_particles
+# kinetic_patchy_particles (cool name coming soon - I hope!)
 # About #
 This program performs Monte Carlo simulations for patchy particle systems using Brownian dynamics. Patchy particles are colloidal models commonly employed on modelling self-assembly processes, such as protein aggregation and phase separation. This program is a project in progress for studying increasingly complex systems, specifying different interaction affinities between patches (interaction sites), having different particle types in a simulation, such as systems of crowders, ions and proteins.
 In the current implementation, patchy particles are hard spheres which interact through its patches by a square well potential.
