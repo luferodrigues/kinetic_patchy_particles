@@ -21,9 +21,18 @@ def simulation_step(sim_params, part_params, inter_params, simulation, threshold
 
 # Initialize and run N simulation steps
 def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = '', transitions = True, clusters_steps = True, manual_dist = 0):
+    labels_com = ['C', 'N', 'O', 'F', 'B', 'Ne', 'Al', 'Si', 'P', 'S', 'Cl',
+                 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe',
+                 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'UUt', 'Fl', 'Uup', 'Lv', 'Uus', 'Uuo']
+    labels_patch = ['H', 'He', 'Li', 'Be', 'Na', 'Mg', 
+                     'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn',
+                     'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 
+                     'Cs', 'Ba', 'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 
+                     'Fr', 'Ra', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn']
     simulation = {}
     path_coords = os.path.join(folder, prefix, 'trajectory.csv')
     path_xyz = os.path.join(folder, prefix, 'visualization.xyz')
+    path_vmd = os.path.join(folder, prefix, 'vmd_init.tcl')
     #path_dists = os.path.join(folder, prefix, 'distances.csv')
     path_clusters = os.path.join(folder, prefix, 'clusters.csv')
     path_cluster_max = os.path.join(folder, prefix, 'cluster_max.csv')
@@ -101,6 +110,12 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
     simulation['clusters'] = step.update_clusters(simulation['interactions'])
     simulation['n_bonds'] = utils.find_bonds_all(part_params, simulation)
     
+    # Setting up dictionaries for .xyz files
+    labels_part_atom, labels_part_patch, labels_patch_atom = \
+        utils.build_label_dictionaries(part_params, labels_com, labels_patch)
+    # Write tcl file for visualization
+    utils.write_tcl(path_vmd, sim_params, part_params, labels_part_atom, labels_part_patch, labels_patch_atom)
+    
     # -------------------------------- #
    
     print('----------------')
@@ -138,7 +153,9 @@ def run_simulation(sim_params, part_params, inter_params, prefix = '', folder = 
                 utils.write_clusters(path_clusters, clusters, frame_number = i, new_file = new_file_toggle)
         if (i == 1) or (i%sim_params['n_interval'] == 0):
             utils.write_coords_csv(path_coords, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
-            utils.write_coords_xyz(path_xyz, sim_params, part_params, simulation_handle[current], frame_number=i, new_file = new_file_toggle)
+            utils.write_coords_xyz(path_xyz, sim_params, part_params, simulation_handle[current], 
+                                   labels_part_atom, labels_part_patch, labels_patch_atom, frame_number=i, 
+                                   new_file = new_file_toggle)
             #utils.write_matrix(path_dists, sim_params, simulation_this_step['distances'], frame_number=i, new_file = new_file_toggle)
             if clusters_steps == False:
                 utils.write_clusters(path_clusters, clusters, frame_number = i, new_file = new_file_toggle)

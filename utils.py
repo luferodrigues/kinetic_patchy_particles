@@ -780,10 +780,106 @@ def write_vmd_config(path, sim_params, part_params, simulation):
         fp.write(f'    ')
     return 0
 
+
+def build_label_dictionaries(part_params, labels_com, labels_patch):
+    dict_part_label = {} 
+    dict_part_patch = {}
+    dict_patch_label = {}
+    processed_parts = []
+    patch_counter = 0
+    for key, value in part_params.items():
+        if key not in processed_parts:
+            params = part_params[key]
+            type_int = int(key)
+            dict_part_label[type_int] = labels_com[type_int]
+            dict_part_patch[type_int] = []
+            try:
+                for p in range(len(params['patches_radius'])):
+                    dict_part_patch[type_int].append(patch_counter)
+                    dict_patch_label[patch_counter] = labels_patch[patch_counter]
+                    patch_counter += 1
+                processed_parts.append(key)
+            except:
+                pass
+    return dict_part_label, dict_part_patch, dict_patch_label
+
+
+# Write tcl file for visualization with VMD
+def write_tcl(filepath, sim_params, part_params, labels_part_atom, labels_part_patch, labels_patch_atom):
+    box_length = 2*sim_params['box_limits']
+    print(sim_params['box_limits'], box_length)
+    with open(filepath, 'w') as fp:
+        fp.write('package require pbctools\n\n')
+        fp.write('mol modstyle 0 top VDW\n')
+        fp.write('foreach {elem rad} {\n')
+        for key, params in part_params.items():
+            # First we get the center of mass atom and hard sphere radius
+            ptype = int(key)
+            rad = params['radius']
+            atom = labels_part_atom[ptype]
+            fp.write(f'    {atom} {rad}\n')
+            # Then we get the patches
+            try:
+                patches_radius = params['patches_radius']
+                for i in range(len(patches_radius)):
+                    patch_idx = labels_part_patch[ptype][i]
+                    atom = labels_patch_atom[patch_idx]
+                    rad = patches_radius[i]
+                    fp.write(f'    {atom} {rad}\n')
+            except:
+                pass
+        fp.write('} {\n')
+        fp.write('    set sel [atomselect top "element $elem"]\n')
+        fp.write('    $sel set radius $rad\n')
+        fp.write('}\n')
+        fp.write('mol reanalyze top\n')
+        fp.write('pbc set {' + str(box_length) + ' ' + str(box_length) + ' ' + str(box_length) + '} -all\n')
+        fp.write('pbc box -center origin\n')
+        fp.write('display projection orthographic')
+
+
 # Change patch per particle to not repeat the same element for different particles
-def write_coords_xyz(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
-    atoms_com = ['C', 'N', 'O', 'F', 'Ne', 'Al', 'Si', 'P', 'S', 'Cl']
-    atoms_patches = ['H', 'He', 'Li', 'Be', 'B', 'Na', 'Mg', 'K', 'Ca', 'Sc']
+def write_coords_xyz(path, sim_params, part_params, simulation, labels_part_atom, labels_part_patch, 
+                     labels_patch_atom, frame_number = 0, new_file = False):
+    # labels_part_atom -> atoms for representing the centers of mass
+    # labels_part_patch -> connection between particle type index and patch indices
+    # labels_patch_atom -> atoms for representing the patch centers
+    n_parts = len(simulation['coordinates'])
+    n_patches = count_all_patches(sim_params, simulation['patches'])
+    n_total = n_parts + n_patches
+    if new_file == True:
+        mode = 'w'
+    else:
+        mode = 'a'
+    with open(path, mode) as fp:
+        fp.write(f'{n_total}\n')
+        fp.write(f'Trajectory: Frame {frame_number}/{sim_params['n_steps']}\n')
+        for i in range(n_parts):
+            part_type = simulation['particles'][i]
+            part_radius = part_params[str(part_type)]['radius']
+            coords = simulation['coordinates'][i]
+            atom_com = labels_part_atom[int(part_type)]
+            fp.write(f"{atom_com}    {coords[0]}    {coords[1]}    {coords[2]}\n")
+            patches_i = simulation['patches'][i]
+            patches_indices = labels_part_patch[int(part_type)]
+            for p, patch in enumerate(patches_i):
+                if isinstance(patch, (list, tuple, np.ndarray)) and len(patch) == sim_params['n_dimensions']:
+                    patches_coords = (patch * part_radius) + coords
+                    patch_idx = patches_indices[p]
+                    atom_label = labels_patch_atom[patch_idx]
+                    fp.write(f"{atom_label}    {patches_coords[0]}    {patches_coords[1]}    {patches_coords[2]}\n")
+
+
+# Change patch per particle to not repeat the same element for different particles
+def write_coords_xyz_old(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
+    atoms_com = ['C', 'N', 'O', 'F', 'B', 'Ne', 'Al', 'Si', 'P', 'S', 'Cl',
+                 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe',
+                 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'UUt', 'Fl', 'Uup', 'Lv', 'Uus', 'Uuo']
+    atoms_patches = ['H', 'He', 'Li', 'Be', 'Na', 'Mg', 
+                     'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn',
+                     'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 
+                     'Cs', 'Ba', 'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 
+                     'Fr', 'Ra', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn']
     n_parts = len(simulation['coordinates'])
     n_patches = count_all_patches(sim_params, simulation['patches'])
     n_total = n_parts + n_patches
