@@ -171,7 +171,7 @@ def count_particles(particles_params):
 
 
 def import_particle_params(filename):
-    list_params = {"patches_radius", "patches_alphas"}
+    list_params = {"patches_radius", "patches_alphas", "patches_bonds"}
     multiline_params = {"patches_positions"}
     particle_parameters = {}
     particle_number = 0
@@ -303,7 +303,7 @@ def import_particle_params(filename):
 
 
 def import_interaction_params(filename):
-    multiline_params = {"interact", "p_ass", "p_diss"}
+    multiline_params = {"interact", "energies", "distances", "p_ass", "p_diss"}
     interaction_parameters = {}
     with open(filename, "r") as f:
         lines = [line.strip() for line in f]
@@ -493,10 +493,16 @@ def copy_dict(entry_dict):
 @njit
 def update_cell_list(coords, box_limits, cell_size, n_cells_xyz):
     total_cells = n_cells_xyz[0] * n_cells_xyz[1] * n_cells_xyz[2]
+    # List containing the first particle per cell (indexed in a flattened manner)
     head = np.full(total_cells, -1, dtype=np.int32)
+    # List of the particle that follows head[idx] in cell idx, so if I have a cell with
+    # the particles 10, 34, 4, I will have head[idx] = 10, and linked_list will have the following
+    # elements: linked_list[10] = 34, linked_list[34] = 4, linked_list[4] = -1 (-1 means no next particle)
     linked_list = np.full(len(coords), -1, dtype=np.int32)
     for i in range(len(coords)):
         # Find cell indices (0 to n_cells-1)
+        # Since my box_limits variable makes the box size range from -box_limits to box_limits,
+        # we shift it, for example, from the [-10,10] reference, to [0,20]
         ix = int((coords[i, 0] + box_limits) / cell_size)
         iy = int((coords[i, 1] + box_limits) / cell_size)
         iz = int((coords[i, 2] + box_limits) / cell_size)
@@ -504,6 +510,7 @@ def update_cell_list(coords, box_limits, cell_size, n_cells_xyz):
         ix = max(0, min(ix, n_cells_xyz[0]-1))
         iy = max(0, min(iy, n_cells_xyz[1]-1))
         iz = max(0, min(iz, n_cells_xyz[2]-1))
+        # 1D flattened form of indexing instead of using a tuple
         c_idx = ix + n_cells_xyz[0] * (iy + n_cells_xyz[1] * iz)
         linked_list[i] = head[c_idx]
         head[c_idx] = i
@@ -548,6 +555,11 @@ def check_particle_interaction(inter_params, particle1, particle2):
         else:
             pass
     return interact
+
+def get_pair_interaction_dist(inter_params, particle1, particle2, patch1, patch2):
+    pair = (particle1, particle2)
+    dist = inter_params[pair]['distances'][patch1][patch2]
+    return dist
 
 def check_patch_interaction(interaction_params_type, patch1, patch2):
     matrix = interaction_params_type['interact']
@@ -682,7 +694,7 @@ def find_bonds(part_params, simulation, particle_index):
             bonds[patch] += 1
     return bonds
         
-# Finds bonds for all particles from interacion matrix
+# Finds bonds for all particles from interaction matrix
 def find_bonds_all(part_params, simulation):
     bonds_all = []
     for idx, val in enumerate(simulation['particles']):
@@ -715,6 +727,39 @@ def test_dissociation(patch1, patch2, prob):
     return inter_element
 
 
+# -------------------------------------------------
+# ------CALCULATE PROBABILITIES FROM ENERGIES------
+# -------------------------------------------------
+
+# For each ENTRY of the dictionary generated from importing an interacions_params file,
+# calculate p_ass and p_diss from energy matrix if not explicitly given in the file
+def add_probs_from_energies(inter_params_entry):
+    tol = 1e-8
+    keys = list(inter_params_entry.keys())
+    if 'p_ass' not in keys:
+        p_ass = np.zeros_like(inter_params_entry['energies'])
+        for r, energies_row in enumerate(inter_params_entry['energies']):
+            for i, energy_val in enumerate(energies_row):
+                p_ass[r,i] = calc.calculate_probability_from_energy(energy_val)
+                if p_ass[r,i] < tol or inter_params_entry['energies'][r][i] == 0:
+                    p_ass[r,i] = 0
+                elif p_ass[r,i] > 1.0 - tol:
+                    p_ass[r,i] = 1
+        inter_params_entry['p_ass'] = p_ass
+    
+    if 'p_diss' not in keys:
+        p_diss = np.zeros_like(inter_params_entry['energies'])
+        for r, energies_row in enumerate(inter_params_entry['energies']):
+            for i, energy_val in enumerate(energies_row):
+                p_diss[r,i] = calc.calculate_probability_from_energy(-energy_val)
+                if p_diss[r,i] < tol:
+                    p_diss[r,i] = 0
+                elif p_diss[r,i] > 1.0 - tol:
+                    p_diss[r,i] = 1
+        inter_params_entry['p_diss'] = p_diss
+            
+
+
 # ------------------------------
 # ------EXPORT FILES BLOCK------
 # ------------------------------
@@ -735,10 +780,106 @@ def write_vmd_config(path, sim_params, part_params, simulation):
         fp.write(f'    ')
     return 0
 
+
+def build_label_dictionaries(part_params, labels_com, labels_patch):
+    dict_part_label = {} 
+    dict_part_patch = {}
+    dict_patch_label = {}
+    processed_parts = []
+    patch_counter = 0
+    for key, value in part_params.items():
+        if key not in processed_parts:
+            params = part_params[key]
+            type_int = int(key)
+            dict_part_label[type_int] = labels_com[type_int]
+            dict_part_patch[type_int] = []
+            try:
+                for p in range(len(params['patches_radius'])):
+                    dict_part_patch[type_int].append(patch_counter)
+                    dict_patch_label[patch_counter] = labels_patch[patch_counter]
+                    patch_counter += 1
+                processed_parts.append(key)
+            except:
+                pass
+    return dict_part_label, dict_part_patch, dict_patch_label
+
+
+# Write tcl file for visualization with VMD
+def write_tcl(filepath, sim_params, part_params, labels_part_atom, labels_part_patch, labels_patch_atom):
+    box_length = 2*sim_params['box_limits']
+    print(sim_params['box_limits'], box_length)
+    with open(filepath, 'w') as fp:
+        fp.write('package require pbctools\n\n')
+        fp.write('mol modstyle 0 top VDW\n')
+        fp.write('foreach {elem rad} {\n')
+        for key, params in part_params.items():
+            # First we get the center of mass atom and hard sphere radius
+            ptype = int(key)
+            rad = params['radius']
+            atom = labels_part_atom[ptype]
+            fp.write(f'    {atom} {rad}\n')
+            # Then we get the patches
+            try:
+                patches_radius = params['patches_radius']
+                for i in range(len(patches_radius)):
+                    patch_idx = labels_part_patch[ptype][i]
+                    atom = labels_patch_atom[patch_idx]
+                    rad = patches_radius[i]
+                    fp.write(f'    {atom} {rad}\n')
+            except:
+                pass
+        fp.write('} {\n')
+        fp.write('    set sel [atomselect top "element $elem"]\n')
+        fp.write('    $sel set radius $rad\n')
+        fp.write('}\n')
+        fp.write('mol reanalyze top\n')
+        fp.write('pbc set {' + str(box_length) + ' ' + str(box_length) + ' ' + str(box_length) + '} -all\n')
+        fp.write('pbc box -center origin\n')
+        fp.write('display projection orthographic')
+
+
 # Change patch per particle to not repeat the same element for different particles
-def write_coords_xyz(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
-    atoms_com = ['C', 'N', 'O', 'F', 'Ne', 'Al', 'Si', 'P', 'S', 'Cl']
-    atoms_patches = ['H', 'He', 'Li', 'Be', 'B', 'Na', 'Mg', 'K', 'Ca', 'Sc']
+def write_coords_xyz(path, sim_params, part_params, simulation, labels_part_atom, labels_part_patch, 
+                     labels_patch_atom, frame_number = 0, new_file = False):
+    # labels_part_atom -> atoms for representing the centers of mass
+    # labels_part_patch -> connection between particle type index and patch indices
+    # labels_patch_atom -> atoms for representing the patch centers
+    n_parts = len(simulation['coordinates'])
+    n_patches = count_all_patches(sim_params, simulation['patches'])
+    n_total = n_parts + n_patches
+    if new_file == True:
+        mode = 'w'
+    else:
+        mode = 'a'
+    with open(path, mode) as fp:
+        fp.write(f'{n_total}\n')
+        fp.write(f'Trajectory: Frame {frame_number}/{sim_params['n_steps']}\n')
+        for i in range(n_parts):
+            part_type = simulation['particles'][i]
+            part_radius = part_params[str(part_type)]['radius']
+            coords = simulation['coordinates'][i]
+            atom_com = labels_part_atom[int(part_type)]
+            fp.write(f"{atom_com}    {coords[0]}    {coords[1]}    {coords[2]}\n")
+            patches_i = simulation['patches'][i]
+            patches_indices = labels_part_patch[int(part_type)]
+            for p, patch in enumerate(patches_i):
+                if isinstance(patch, (list, tuple, np.ndarray)) and len(patch) == sim_params['n_dimensions']:
+                    patches_coords = (patch * part_radius) + coords
+                    patch_idx = patches_indices[p]
+                    atom_label = labels_patch_atom[patch_idx]
+                    fp.write(f"{atom_label}    {patches_coords[0]}    {patches_coords[1]}    {patches_coords[2]}\n")
+
+
+# Change patch per particle to not repeat the same element for different particles
+def write_coords_xyz_old(path, sim_params, part_params, simulation, frame_number = 0, new_file = False):
+    atoms_com = ['C', 'N', 'O', 'F', 'B', 'Ne', 'Al', 'Si', 'P', 'S', 'Cl',
+                 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe',
+                 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'UUt', 'Fl', 'Uup', 'Lv', 'Uus', 'Uuo']
+    atoms_patches = ['H', 'He', 'Li', 'Be', 'Na', 'Mg', 
+                     'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn',
+                     'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 
+                     'Cs', 'Ba', 'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 
+                     'Fr', 'Ra', 'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn']
     n_parts = len(simulation['coordinates'])
     n_patches = count_all_patches(sim_params, simulation['patches'])
     n_total = n_parts + n_patches
@@ -819,6 +960,20 @@ def write_clusters_feats(path, cluster_feats, frame_number = 0, new_file = False
                 fp.write(f'{cluster_feats[i]}')
             else:
                 fp.write(f'{cluster_feats[i]},')
+        fp.write('\n')
+        
+def write_n_bonds(path, particle_index, n_bonds, frame_number = 0, new_file = False):
+    if new_file == False:
+        mode = 'a'
+    else:
+        mode = 'w'
+    with open(path, mode) as fp:
+        fp.write(f'{frame_number},{particle_index},')
+        for i in range(len(n_bonds)):
+            if i == len(n_bonds):
+                fp.write(f'{n_bonds[i]}')
+            else:
+                fp.write(f'{n_bonds[i]},')
         fp.write('\n')
         
 def write_clusters_int(path, cluster_int, frame_number = 0, new_file = False):
@@ -1018,3 +1173,21 @@ def write_transitions(path, transitions, frame_number = 0, new_file = False):
                     else:
                         fp.write(f'{t1}')
                 fp.write('\n')
+                
+# Import transitions from .csv file to two lists: one for associations and another for dissociations
+# Entries: association -> [frame_number, [a,b], a+b] or dissociation -> [frame_number, a+b, [a,b]]
+def import_transitions(path):
+    associations = []
+    dissociations = []
+    with open(path, 'r') as fp:
+        counter = 1
+        for line in fp:
+            split = line.split(',')
+            if split[2] == '-':
+                dissociations.append([int(split[0]), [int(split[1])], [int(split[3]), int(split[4])]])
+            elif split[3] == '-':
+                associations.append([int(split[0]), [int(split[1]), int(split[2])], [int(split[4])]])
+            else:
+                print(f'Strange line at line {counter}')
+            counter += 1
+    return associations, dissociations

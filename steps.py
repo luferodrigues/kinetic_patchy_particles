@@ -260,9 +260,16 @@ def update_interactions(sim_params, part_params, inter_params, simulation, thres
                                 b = pair_patches[1]
                                 r_hs1 = params1['radius']
                                 r_hs2 = params2['radius']
-                                r_p1 = params1['patches']['radius'][a]
-                                r_p2 = params2['patches']['radius'][b]
-                                r_limit = r_hs1 + r_p1 + r_hs2 + r_p2
+                                try:
+                                    r_int = utils.get_pair_interaction_dist(inter_params, particle1, particle2, a, b)
+                                except:
+                                    try:
+                                        r_p1 = params1['patches']['radius'][a]
+                                        r_p2 = params2['patches']['radius'][b]
+                                        r_int = r_p1 + r_p2
+                                    except:
+                                        raise SystemExit('Please define interaction distances for each patch')
+                                r_limit = r_hs1 + r_hs2 + r_int
                                 dist_check = utils.check_distance(r_limit, distance12)
                                 # Checks if oriented patches are within interaction distance
                                 if dist_check == True:
@@ -270,13 +277,19 @@ def update_interactions(sim_params, part_params, inter_params, simulation, thres
                                     patch_type1 = pair_patches[0]
                                     patch_type2 = pair_patches[1]
                                     has_negative = np.any(inter_ij < 0)
-                                    # Checks if they are interacting
-                                    if has_negative == True:
-                                        prob = inter_params[pair_particles]['p_ass'][patch_type1][patch_type2]
-                                        interactions_new[i][j] = utils.test_association(patch_type1, patch_type2, prob)
+                                    # Verify if still has available sites in patches (n_bonds < max)
+                                    n_bonds1 = simulation['n_bonds'][i][patch_type1]
+                                    n_bonds2 = simulation['n_bonds'][j][patch_type2]
+                                    if n_bonds1 == part_params[str(particle1)]['patches_bonds'][patch_type1] or n_bonds2 == part_params[str(particle2)]['patches_bonds'][patch_type2]:
+                                        continue
                                     else:
-                                        prob = inter_params[pair_particles]['p_diss'][patch_type1][patch_type2]
-                                        interactions_new[i][j] = utils.test_dissociation(patch_type1, patch_type2, prob)
+                                        # Checks if they are interacting
+                                        if has_negative == True:
+                                            prob = inter_params[pair_particles]['p_ass'][patch_type1][patch_type2]
+                                            interactions_new[i][j] = utils.test_association(patch_type1, patch_type2, prob)
+                                        else:
+                                            prob = inter_params[pair_particles]['p_diss'][patch_type1][patch_type2]
+                                            interactions_new[i][j] = utils.test_dissociation(patch_type1, patch_type2, prob)
                         interactions_new[j][i] = interactions_new[i][j].copy()
                         interactions_new[j][i][0], interactions_new[j][i][1] = \
                         interactions_new[j][i][1], interactions_new[j][i][0]
@@ -314,21 +327,6 @@ def update_clusters(interactions):
         if len(cluster) > 1:
             clusters.append(cluster)
     return clusters
-
-# =============================================================================
-# def eject_from_cluster(index_separation, interactions_bool, coordinates, diff):
-#     clusters = update_clusters(interactions_bool)
-#     target_cluster = # Search
-#     accept = False
-#     while accept == False:
-#         coord_move = generate_step_coords(diff)
-#         for index in target_cluster:
-#             candidate_coordinate = coordinates[index]
-#         
-#         # MOVE THE WHOLE CLUSTER TOGETHER
-#     # TRY TO MOVE A "SAFE DISTANCE AWAY" (DON'T TRY JUST A SINGLE MOVE)
-#     return 0
-# =============================================================================
 
 # Find coordinate from potentially neighboring (periodic) boxes with minimum distance to reference vector (vec2)
 @njit

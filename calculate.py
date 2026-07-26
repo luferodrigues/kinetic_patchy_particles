@@ -3,6 +3,16 @@ from scipy.spatial.transform import Rotation as R
 from numba import njit
 import utils
 
+# Calculates probability from energy in kBT units 
+def calculate_probability_from_energy(delta_energy):
+    prob = np.exp(-delta_energy)
+    return prob
+
+# Calculates energy in kBT units from probability
+def calculate_energy_from_probability(prob):
+    delta_energy = -np.log(prob)
+    return delta_energy
+
 # Simple distance calculation
 @njit
 def calculate_distance_simple(vec1, vec2):
@@ -186,7 +196,7 @@ def sq_from_gr(parameters, q, r, gr):
         integral[i] = np.trapezoid(integrand, x = r)
     return 1 + n/v * 4*np.pi * integral
 
-def sq_from_frame(sim_params, simulation, qmax=None, nq=100):
+def sq_from_frame(sim_params, simulation, frame_number = -1, qmax=None, nq=100):
     box_length = 2*sim_params['box_limits']
     positions = simulation
     positions = np.asarray(positions)
