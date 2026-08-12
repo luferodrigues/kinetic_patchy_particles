@@ -142,6 +142,16 @@ def structure_factor(positions, box_length, qmax=None, nq=100):
     sq[mask] /= counts[mask]
     return qvals[mask], sq[mask]
 
+def structure_factor_frames(positions_frames, box_length, qmax=None, nq=100):
+    sq_frames = []
+    for positions in positions_frames:
+        q, sq = structure_factor(positions, box_length, qmax, nq)
+        sq_frames.append(sq)
+    sq_frames = np.array(sq_frames)
+    sq_avg = np.average(sq_frames)
+    sq_std = np.std(sq_frames)
+    return q, sq_avg, sq_std
+
 
 
 # ----------------------------------------
