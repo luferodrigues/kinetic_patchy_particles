@@ -148,8 +148,8 @@ def structure_factor_frames(positions_frames, box_length, qmax=None, nq=100):
         q, sq = structure_factor(positions, box_length, qmax, nq)
         sq_frames.append(sq)
     sq_frames = np.array(sq_frames)
-    sq_avg = np.average(sq_frames)
-    sq_std = np.std(sq_frames)
+    sq_avg = np.average(sq_frames, axis = 0)
+    sq_std = np.std(sq_frames, axis = 0)
     return q, sq_avg, sq_std
 
 
