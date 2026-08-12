@@ -5,11 +5,6 @@ from scipy.spatial import Delaunay
 # ---------AUXILIARY FUNCTIONS------------
 # ----------------------------------------
 
-# "Correct" numpy histogram: placing distribution between edges
-def correct_histogram(histogram):
-    bins_centers = histogram[1][:-1] + (histogram[1][1] - histogram[1][0]) / 2 # Exclude last point and add half REGULAR bin width
-    return [bins_centers, histogram[0]]
-
 
 
 # ----------------------------------------
@@ -96,6 +91,56 @@ def import_traj_part_type(target_part_type, part_file, traj_file, frame_start = 
             traj_part_type.append(frame_coords)
         traj_part_type = np.array(traj_part_type)
     return traj_part_type
+
+
+
+# ----------------------------------------
+# -----------STRUCTURE FACTOR-------------
+# ----------------------------------------
+
+def structure_factor(positions, box_length, qmax=None, nq=100):
+    positions = np.asarray(positions)
+    n, dim = positions.shape
+    # Spacing in reciprocal space
+    dq = 2 * np.pi / box_length
+    if qmax is None:
+        qmax = 10 * dq
+    # Integer reciprocal lattice vectors
+    nmax = int(np.ceil(qmax / dq))
+    q_vectors = []
+    q_magnitudes = []
+    
+    # Generate reciprocal vectors
+    ranges = [range(-nmax, nmax + 1)] * dim
+    for nvec in np.array(np.meshgrid(*ranges)).T.reshape(-1, dim):
+        if np.all(nvec == 0):
+            continue
+        qvec = dq * nvec
+        qmag = np.linalg.norm(qvec)
+        if qmag <= qmax:
+            q_vectors.append(qvec)
+            q_magnitudes.append(qmag)
+
+    q_vectors = np.array(q_vectors)
+    q_magnitudes = np.array(q_magnitudes)
+    # Density modes rho(q)
+    rho_q = np.exp(-1j * positions @ q_vectors.T).sum(axis=0)
+    # Structure factor
+    s_q = (np.abs(rho_q) ** 2) / n
+    # Binning by |q|
+    bins = np.linspace(0, qmax, nq + 1)
+    qvals = 0.5 * (bins[:-1] + bins[1:])
+    sq = np.zeros(nq)
+    counts = np.zeros(nq)
+
+    inds = np.digitize(q_magnitudes, bins) - 1
+    for i, s in zip(inds, s_q):
+        if 0 <= i < nq:
+            sq[i] += s
+            counts[i] += 1
+    mask = counts > 0
+    sq[mask] /= counts[mask]
+    return qvals[mask], sq[mask]
 
 
 
